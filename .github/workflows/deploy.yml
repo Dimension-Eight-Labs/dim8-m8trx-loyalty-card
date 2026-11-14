@@ -1,0 +1,73 @@
+# Build M8TRX and publish dist/ to GitHub Pages.
+#
+# Standard GitHub Pages "GitHub Actions" source pattern (as recommended by the
+# Vite static-deploy guide): a build job uploads dist/ as a Pages artifact and
+# a deploy job publishes it to the github-pages environment. No secrets or
+# personal tokens are used; deploy-pages authenticates with the workflow's
+# short-lived OIDC token (id-token: write).
+#
+# Prerequisite (owner, one time): Settings -> Pages -> Build and deployment ->
+# Source = "GitHub Actions".
+#
+# The production base path (/dim8-m8trx-loyalty-card/) comes from
+# vite.config.ts, so nothing here depends on the Pages URL.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Minimum permissions for a Pages deployment: read the repository, write the
+# Pages site, and mint the OIDC token deploy-pages verifies.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One Pages deployment at a time. A queued run waits rather than cancelling an
+# in-progress deployment, so a publish is never interrupted halfway; GitHub
+# keeps only the newest pending run, so rapid pushes still end on the latest
+# commit.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `npm run build` type-checks (tsc -b) before `vite build`.
+      - name: Build
+        run: npm run build
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

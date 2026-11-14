@@ -1,14 +1,14 @@
 /**
- * PWA identity checks (v0.5.0): manifest names and colours, icon files and
- * their real pixel sizes, index.html metadata, the version constant, and the
- * logo assets. Host test reading repository files; it does not prove how
+ * PWA identity checks (v0.5.0): manifest names, colours and GitHub Pages
+ * scope, icon files and their real pixel sizes, index.html metadata, the
+ * version constant, and the logo assets. Host test reading repository files; it does not prove how
  * iOS renders the installed icon (that is a physical-iPhone check).
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { APP_NAME, APP_VERSION } from './appMetadata.ts'
-import { BACKGROUND_COLOR, PWA_MANIFEST, THEME_COLOR } from './pwaManifest.ts'
+import { BACKGROUND_COLOR, createPwaManifest, GITHUB_PAGES_BASE, PWA_MANIFEST, THEME_COLOR } from './pwaManifest.ts'
 
 const ROOT = join(import.meta.dirname, '../..')
 const read = (path: string) => readFileSync(join(ROOT, path))
@@ -26,13 +26,32 @@ describe('PWA manifest and browser metadata', () => {
     expect(PWA_MANIFEST.short_name).toBe('M8TRX')
     expect(PWA_MANIFEST.description).toContain('by DIM8 Labs')
     expect(PWA_MANIFEST.display).toBe('standalone')
-    expect(PWA_MANIFEST.start_url).toBe('/')
     const tokens = read('src/styles/tokens.css').toString()
     const bg = /--dim8-bg:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1]
     expect(THEME_COLOR.toLowerCase()).toBe(bg)
     expect(BACKGROUND_COLOR.toLowerCase()).toBe(bg)
     expect(PWA_MANIFEST.theme_color).toBe(THEME_COLOR)
     expect(PWA_MANIFEST.background_color).toBe(BACKGROUND_COLOR)
+  })
+
+  it('scopes the production manifest to the GitHub Pages repository subpath', () => {
+    expect(GITHUB_PAGES_BASE).toBe('/dim8-m8trx-loyalty-card/')
+    expect(PWA_MANIFEST.id).toBe(GITHUB_PAGES_BASE)
+    expect(PWA_MANIFEST.start_url).toBe(GITHUB_PAGES_BASE)
+    expect(PWA_MANIFEST.scope).toBe(GITHUB_PAGES_BASE)
+    // Icon paths stay relative so they resolve against the manifest URL.
+    for (const icon of PWA_MANIFEST.icons) expect(icon.src).not.toMatch(/^\//)
+    // The same manifest at the root base (dev / tests) only changes the paths.
+    const root = createPwaManifest('/')
+    expect({ ...root, id: '', start_url: '', scope: '' }).toEqual({ ...PWA_MANIFEST, id: '', start_url: '', scope: '' })
+    expect([root.id, root.start_url, root.scope]).toEqual(['/', '/', '/'])
+  })
+
+  it('uses the GitHub Pages base for production builds only', () => {
+    const config = read('vite.config.ts').toString()
+    expect(config).toContain("const base = mode === 'production' ? GITHUB_PAGES_BASE : '/'")
+    expect(config).toContain('manifest: { ...manifest,')
+    expect(config).toContain("navigateFallback: 'index.html'")
   })
 
   it('references icon files that exist at their declared sizes, including a maskable icon', () => {
@@ -51,8 +70,10 @@ describe('PWA manifest and browser metadata', () => {
     expect(html).toContain('<meta name="apple-mobile-web-app-title" content="M8TRX" />')
     expect(html).toContain('by DIM8 Labs')
     expect(html).toContain(`<meta name="theme-color" content="${THEME_COLOR}" />`)
-    expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />')
-    expect(html).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />')
+    // %BASE_URL% lets Vite prefix the GitHub Pages subpath in production builds.
+    expect(html).toContain('<link rel="icon" href="%BASE_URL%favicon.svg" type="image/svg+xml" />')
+    expect(html).toContain('<link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />')
+    expect(html).not.toMatch(/href="\/(?!\/)/)
     expect(html).not.toMatch(/Loyalty Card/)
   })
 

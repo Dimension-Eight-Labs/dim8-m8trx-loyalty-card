@@ -11,8 +11,9 @@
     <!-- Dark-first: matches --color-bg in tokens.css and THEME_COLOR in src/app/pwaManifest.ts. -->
     <meta name="theme-color" content="#010100" />
     <meta name="color-scheme" content="dark" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Icon hrefs use Vite's BASE_URL placeholder: "/" in dev, the GitHub Pages subpath in production builds. -->
+    <link rel="icon" href="%BASE_URL%favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
     <title>M8TRX</title>
   </head>
   <body>

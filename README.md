@@ -600,7 +600,7 @@ Timestamps are kept internally but never shown.
 | `npm run lint`      | Run ESLint.                                                    |
 | `npm run typecheck` | Type-check the app and config with `tsc -b`.                   |
 | `npm run build`     | Type-check, then build to `dist/` with the manifest and service worker. |
-| `npm run preview`   | Serve the production build locally.                            |
+| `npm run preview`   | Serve the production build locally at `/dim8-m8trx-loyalty-card/` (see [Deployment](#deployment-github-pages)). |
 | `npm run icons`     | Regenerate the icons in `public/` from `scripts/generate-icons.mjs`. |
 | `python3 scripts/split-m8trx-backup.py FILE.m8trx` | Split an oversized backup into restorable parts (see [Advanced](#advanced-working-with-oversized-m8trx-backups)). |
 
@@ -608,7 +608,9 @@ Timestamps are kept internally but never shown.
 
 ```
 index.html                  HTML shell: viewport, dark theme colour, favicon
-vite.config.ts              Vite, PWA (manifest + service worker), and Vitest config
+vite.config.ts              Vite, PWA (manifest + service worker), and Vitest config;
+                            production base path for GitHub Pages
+.github/workflows/deploy.yml  GitHub Pages build + deploy on push to main
 scripts/generate-icons.mjs  Reproducible icon + logo-derivative generator (Node built-ins only)
 scripts/split-m8trx-backup.py  Splits an oversized backup into restorable parts (Python stdlib)
 LICENSE                     GNU GPL version 3 (unmodified official text)
@@ -622,7 +624,7 @@ src/
   app/AddCardFooter.tsx     Add Card footer: Backup, About, copyright
   app/appMetadata.ts        Product name, version (from package.json), legal copy,
                             official repository and README links
-  app/pwaManifest.ts        Web app manifest data and theme colours
+  app/pwaManifest.ts        Web app manifest data, theme colours, GitHub Pages base path
   assets/brand/             Generated DIM8 logo derivatives (bundled, precached)
   components/               Shared presentation (AppHeader + BrandLockup, Dialog,
                             ViewHeading, icons)
@@ -890,7 +892,8 @@ long-press, or the grid animation.
 
 ### Verifying offline support manually
 
-1. `npm run build && npm run preview`, then open the printed URL in Chrome or Edge.
+1. `npm run build && npm run preview`, then open the printed URL (it ends in
+   `/dim8-m8trx-loyalty-card/`) in Chrome or Edge.
 2. In DevTools → **Application** → **Service workers**, confirm `sw.js` is
    activated. Under **Manifest**, confirm the name, icons, and installability.
 3. Reload once so the page is controlled by the service worker.
@@ -903,6 +906,58 @@ long-press, or the grid animation.
 
 On a phone, use the browser's "Install app" / "Add to Home Screen" action. PWA
 installation requires HTTPS, except on `localhost`.
+
+## Deployment (GitHub Pages)
+
+Official application URL:
+<https://dimension-eight-labs.github.io/dim8-m8trx-loyalty-card/>
+
+The site is published by GitHub Pages with **GitHub Actions** as its source
+(repository Settings → Pages → Build and deployment → Source: GitHub Actions;
+no custom domain). The workflow `.github/workflows/deploy.yml` runs on every
+push to `main` and can be started by hand from the **Actions** tab (**Deploy
+to GitHub Pages** → **Run workflow**). It runs `npm ci` and `npm run build`
+(type-check plus Vite build), uploads `dist/`, and deploys it to the
+`github-pages` environment. It needs no secrets or tokens.
+
+Production builds use the repository subpath `/dim8-m8trx-loyalty-card/` as
+Vite's `base` (`GITHUB_PAGES_BASE` in `src/app/pwaManifest.ts`). Asset, icon,
+and manifest URLs, the manifest's `id`/`start_url`/`scope`, and the service
+worker's registration scope all sit under that path. `npm run dev` still
+serves from `/`.
+
+**Inspecting a failed deployment.** Open the repository's **Actions** tab,
+select the failed **Deploy to GitHub Pages** run, and expand the failing
+step: `build` (install, type-check, or Vite errors) or `deploy` (Pages
+publishing). The **github-pages** environment (repository home page →
+*Deployments*) lists each deployment and links to its run. A `deploy`
+failure that mentions Pages not being enabled usually means the Pages source
+is not set to GitHub Actions.
+
+**Building and previewing locally**, exactly as Pages will serve it:
+
+```bash
+npm ci
+npm run build
+npm run preview
+# open http://localhost:4173/dim8-m8trx-loyalty-card/
+```
+
+Vite picks another port if 4173 is taken; use the URL `npm run preview`
+prints. Add `-- --host 127.0.0.1` (or a LAN address) to choose the interface.
+
+**Local data is per origin.** Cards, artwork, and settings live in the
+browser's IndexedDB, which belongs to one *origin* (scheme + host + port) and
+one browser. `http://localhost:5173` (dev), `http://localhost:4173`
+(preview), any earlier test host, and
+`https://dimension-eight-labs.github.io` each have their own separate wallet.
+On iPhone, Safari and each Home Screen app also keep separate storage. Moving
+to the GitHub Pages site does not carry cards over: export a backup
+(**Backup** in the Add Card footer) at the old origin and restore it at the
+new one (see
+[Backup format and restore policy](#backup-format-and-restore-policy)).
+Application updates do not delete IndexedDB, and users never need to clear
+website data to update. Clearing site data, however, does erase the wallet.
 
 ## Icons
 
