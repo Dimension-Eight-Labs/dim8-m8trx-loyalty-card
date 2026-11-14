@@ -42,7 +42,7 @@ type Step =
   | { name: 'scan' }
   | { name: 'import'; file: File }
   | { name: 'manual'; initial?: { format: BarcodeFormat; value: string } }
-  | { name: 'details'; barcode: CardBarcode; from: 'scan' | 'import' | 'manual' }
+  | { name: 'details'; barcode: CardBarcode; from: 'scan' | 'import' | 'manual'; artwork?: boolean }
 
 export function AddCardFlow({ defaultColor, onSave, onCancel, services = defaultCaptureServices }: AddCardFlowProps) {
   const [step, setStep] = useState<Step>({ name: 'choose' })
@@ -65,7 +65,8 @@ export function AddCardFlow({ defaultColor, onSave, onCancel, services = default
     else go({ name: 'choose' })
   }
 
-  const toDetails = (barcode: CardBarcode, from: 'scan' | 'import' | 'manual') => go({ name: 'details', barcode, from })
+  const toDetails = (barcode: CardBarcode, from: 'scan' | 'import' | 'manual', artwork = false) =>
+    go({ name: 'details', barcode, from, ...(artwork ? { artwork } : {}) })
 
   return (
     <section className="add-flow" aria-labelledby="add-flow-heading">
@@ -131,7 +132,7 @@ export function AddCardFlow({ defaultColor, onSave, onCancel, services = default
           file={step.file}
           services={services}
           focusOnMount={moved}
-          onCaptured={(barcode) => toDetails(barcode, 'import')}
+          onCaptured={(barcode, options) => toDetails(barcode, 'import', options?.artwork === true)}
           onChooseAnother={() => fileRef.current?.click()}
         />
       )}
@@ -146,7 +147,13 @@ export function AddCardFlow({ defaultColor, onSave, onCancel, services = default
       )}
 
       {step.name === 'details' && (
-        <CardDetailsForm barcode={step.barcode} defaultColor={defaultColor} focusOnMount={moved} onSave={onSave} />
+        <CardDetailsForm
+          barcode={step.barcode}
+          artwork={step.artwork === true}
+          defaultColor={defaultColor}
+          focusOnMount={moved}
+          onSave={onSave}
+        />
       )}
     </section>
   )

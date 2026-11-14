@@ -126,6 +126,21 @@ describe('App', () => {
     expect(screen.getByText('Card saved.')).toBeInTheDocument()
   })
 
+  it('shows a miniature card preview on each tile: bars for linear codes, a QR motif for QR codes', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'Bar Shop', '0012', 'Code 128', 'Red')
+    await addManualCard(user, 'QR Shop', 'MEMBER 1', 'QR code', 'White')
+
+    const barTile = screen.getByRole('button', { name: 'Bar Shop' })
+    const qrTile = screen.getByRole('button', { name: 'QR Shop' })
+    expect(barTile.querySelector('[data-preview="linear"]')).toBeInTheDocument()
+    expect(qrTile.querySelector('[data-preview="qr"]')).toBeInTheDocument()
+    expect(qrTile.closest('li')!.style.getPropertyValue('--tile-accent')).toBe('#eceff1')
+    // Still no card data on the home screen.
+    expect(screen.queryByText('0012')).not.toBeInTheDocument()
+    expect(screen.queryByText('MEMBER 1')).not.toBeInTheDocument()
+  })
+
   it('validates manual entry against the format and check digit', async () => {
     const { user } = renderApp()
     await user.click(await screen.findByRole('button', { name: /add card/i }))
@@ -336,8 +351,74 @@ describe('App', () => {
     await user.click(await screen.findByRole('button', { name: /add card/i }))
     await user.upload(screen.getByLabelText('Choose image'), new File(['img'], 'card.png', { type: 'image/png' }))
 
-    expect(await screen.findByText('MEMBER-0042')).toBeInTheDocument()
+    // A decoded QR offers the redrawn code (default) or the original artwork.
+    expect(await screen.findByText('Found a QR code.')).toBeInTheDocument()
+    expect(screen.getByText('MEMBER-0042')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Use redrawn QR code' }))
+
+    expect(await screen.findByRole('heading', { name: 'Check and name' })).toBeInTheDocument()
+    expect(screen.getByText('MEMBER-0042')).toBeInTheDocument()
     expect(screen.getByText('QR code')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /captured barcode \(qr code\)/i })).toBeInTheDocument()
+  })
+
+  it('imports a 1D barcode straight to the details step without the artwork choice', async () => {
+    const capture = fakeCapture({
+      decodeImage: vi.fn(async (): Promise<DecodeResult> => ({ status: 'decoded', format: 'ean13', value: '4006381333931' })),
+    })
+    const { user } = renderApp(makeRepository(), capture)
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    await user.upload(screen.getByLabelText('Choose image'), new File(['img'], 'card.png', { type: 'image/png' }))
+
+    expect(await screen.findByRole('heading', { name: 'Check and name' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Keep original artwork' })).not.toBeInTheDocument()
+  })
+
+  it('keeps the original QR artwork as a cropped image with the exact decoded value', async () => {
+    // jsdom Blobs can't be stored in IndexedDB (browsers' can); see repository tests.
+    const NODE_BUFFER: string = 'node:buffer'
+    const { Blob: NodeBlob } = (await import(/* @vite-ignore */ NODE_BUFFER)) as { Blob: typeof Blob }
+    vi.stubGlobal('Blob', NodeBlob)
+    const value = '  0000123 Gold  '
+    const cropImage = vi.fn(async () => new NodeBlob(['png-bytes'], { type: 'image/png' }))
+    const capture = fakeCapture({
+      decodeImage: vi.fn(async (): Promise<DecodeResult> => ({ status: 'decoded', format: 'qrcode', value })),
+      cropImage,
+    })
+    const { user } = renderApp(makeRepository(), capture)
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    await user.upload(screen.getByLabelText('Choose image'), new File(['img'], 'logo-qr.png', { type: 'image/png' }))
+
+    await user.click(await screen.findByRole('button', { name: 'Keep original artwork' }))
+    // The existing cropper, preset to the square frame, with no retry needed.
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Square' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save cropped image' }))
+
+    expect(await screen.findByText(/original artwork, shown as-is/i)).toBeInTheDocument()
+    expect(screen.queryByText(/couldn’t be redrawn/i)).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Store name'), 'Logo Shop')
+    await user.click(screen.getByRole('button', { name: 'Save card' }))
+    await screen.findByRole('button', { name: 'Logo Shop' })
+
+    const [stored] = await makeRepository().list()
+    expect(stored?.barcode).toMatchObject({ kind: 'image', detectedFormat: 'QR code', detectedValue: value })
+    expect(cropImage).toHaveBeenCalledTimes(1)
+  })
+
+  it('can return from the artwork cropper to the redrawn QR code', async () => {
+    const capture = fakeCapture({
+      decodeImage: vi.fn(async (): Promise<DecodeResult> => ({ status: 'decoded', format: 'qrcode', value: 'MEMBER-7' })),
+    })
+    const { user } = renderApp(makeRepository(), capture)
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    await user.upload(screen.getByLabelText('Choose image'), new File(['img'], 'card.png', { type: 'image/png' }))
+    await user.click(await screen.findByRole('button', { name: 'Keep original artwork' }))
+    await user.click(screen.getByRole('button', { name: 'Use redrawn QR code' }))
+
+    expect(await screen.findByRole('img', { name: /captured barcode \(qr code\)/i })).toBeInTheDocument()
+    expect(screen.getByText('MEMBER-7')).toBeInTheDocument()
   })
 
   it('offers crop-and-retry when an imported image has no readable barcode, and succeeds on retry', async () => {
@@ -452,6 +533,81 @@ describe('App', () => {
     expect(screen.getByRole('dialog', { name: 'First' })).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(screen.getByRole('button', { name: 'First' })).toHaveFocus()
+  })
+
+  it('shows the checkout as a card: accent header with the store name and ×, matching bottom strip', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'Corner Coffee', '0012', 'Code 128', 'Green')
+    await user.click(screen.getByRole('button', { name: 'Corner Coffee' }))
+
+    const checkout = screen.getByRole('dialog', { name: 'Corner Coffee' })
+    expect(checkout.style.getPropertyValue('--card-accent')).toBe('#2e7d32')
+    expect(checkout.style.getPropertyValue('--card-on-accent')).toBe('#ffffff')
+    const header = screen.getByTestId('checkout-header')
+    expect(within(header).getByRole('heading', { level: 1, name: 'Corner Coffee' })).toBeInTheDocument()
+    expect(within(header).getByRole('button', { name: 'Close card' })).toBeInTheDocument()
+    expect(screen.getByTestId('checkout-footer')).toHaveAttribute('aria-hidden', 'true')
+    // The barcode stays on the stage, between the bands.
+    expect(within(screen.getByTestId('checkout-stage')).getByRole('img', { name: /code 128/i })).toBeInTheDocument()
+  })
+
+  it('uses the dark text colour on light accent colours', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'Sunny', '1', 'Code 128', 'Yellow')
+    await user.click(screen.getByRole('button', { name: 'Sunny' }))
+
+    const checkout = screen.getByRole('dialog', { name: 'Sunny' })
+    expect(checkout.style.getPropertyValue('--card-accent')).toBe('#fbc02d')
+    expect(checkout.style.getPropertyValue('--card-on-accent')).toBe('#1a1a1a')
+  })
+
+  it('closes checkout with a deliberate downward swipe and returns focus to the tile', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'First', '1')
+    await addManualCard(user, 'Second', '2')
+    await user.click(screen.getByRole('button', { name: 'Second' }))
+
+    const stage = screen.getByTestId('checkout-stage')
+    fireEvent.pointerDown(stage, { pointerId: 1, isPrimary: true, clientX: 200, clientY: 200 })
+    fireEvent.pointerMove(stage, { pointerId: 1, clientX: 205, clientY: 260 })
+    fireEvent.pointerMove(stage, { pointerId: 1, clientX: 210, clientY: 360 })
+    fireEvent.pointerUp(stage, { pointerId: 1, clientX: 210, clientY: 360 })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(document.documentElement).not.toHaveClass('checkout-open')
+    expect(screen.getByRole('button', { name: 'Second' })).toHaveFocus()
+  })
+
+  it('does not close for taps, short, diagonal, upward, horizontal or cancelled gestures', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'First', '1')
+    await addManualCard(user, 'Second', '2')
+    await user.click(screen.getByRole('button', { name: 'First' }))
+    const stage = screen.getByTestId('checkout-stage')
+    const gesture = (id: number, to: { x: number; y: number }, cancel = false) => {
+      fireEvent.pointerDown(stage, { pointerId: id, isPrimary: true, clientX: 200, clientY: 200 })
+      fireEvent.pointerMove(stage, { pointerId: id, clientX: 200 + to.x / 2, clientY: 200 + to.y / 2 })
+      fireEvent.pointerMove(stage, { pointerId: id, clientX: 200 + to.x, clientY: 200 + to.y })
+      if (cancel) fireEvent.pointerCancel(stage, { pointerId: id, clientX: 200 + to.x, clientY: 200 + to.y })
+      else fireEvent.pointerUp(stage, { pointerId: id, clientX: 200 + to.x, clientY: 200 + to.y })
+    }
+
+    gesture(1, { x: 0, y: 0 }) // tap
+    gesture(2, { x: 3, y: 8 }) // jitter inside the dead zone
+    gesture(3, { x: 0, y: 70 }) // short downward drag
+    gesture(4, { x: 110, y: 130 }) // diagonal
+    gesture(5, { x: 0, y: -200 }) // upward
+    gesture(6, { x: 0, y: 220 }, true) // cancelled by the browser
+    expect(screen.getByRole('dialog', { name: 'First' })).toBeInTheDocument()
+
+    // A horizontal swipe with some downward drift switches cards and does not close.
+    gesture(7, { x: -150, y: 40 })
+    expect(screen.getByRole('dialog', { name: 'Second' })).toBeInTheDocument()
+    // A horizontal swipe that turns downward late is still horizontal (axis lock).
+    fireEvent.pointerDown(stage, { pointerId: 8, isPrimary: true, clientX: 300, clientY: 200 })
+    fireEvent.pointerMove(stage, { pointerId: 8, clientX: 270, clientY: 202 })
+    fireEvent.pointerUp(stage, { pointerId: 8, clientX: 280, clientY: 400 })
+    expect(screen.getByRole('dialog', { name: 'Second' })).toBeInTheDocument()
   })
 
   it('requests a screen wake lock in checkout and releases it on close', async () => {
@@ -628,7 +784,9 @@ describe('App', () => {
     })
     const { user } = renderApp()
 
-    await user.click(await screen.findByRole('button', { name: 'Old Card' }))
+    const tile = await screen.findByRole('button', { name: 'Old Card' })
+    expect(tile.querySelector('[data-preview="text"]')).toBeInTheDocument()
+    await user.click(tile)
     expect(screen.getByText('000123')).toBeInTheDocument()
     expect(screen.getByText(/no barcode saved/i)).toBeInTheDocument()
     expect(screen.queryByRole('img')).not.toBeInTheDocument()

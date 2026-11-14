@@ -17,12 +17,14 @@ import { ColorPicker } from '../cards/ColorPicker.tsx'
 
 export interface CardDetailsFormProps {
   barcode: CardBarcode
+  /** The image is original artwork the user chose to keep (not a fallback). */
+  artwork?: boolean
   defaultColor: string
   focusOnMount: boolean
   onSave: (input: NewCardInput) => Promise<string | null>
 }
 
-export function CardDetailsForm({ barcode, defaultColor, focusOnMount, onSave }: CardDetailsFormProps) {
+export function CardDetailsForm({ barcode, artwork = false, defaultColor, focusOnMount, onSave }: CardDetailsFormProps) {
   const [storeName, setStoreName] = useState('')
   const [color, setColor] = useState(defaultColor)
   const [nameError, setNameError] = useState<string | null>(null)
@@ -66,7 +68,14 @@ export function CardDetailsForm({ barcode, defaultColor, focusOnMount, onSave }:
               <span>Redrawn from the barcode data. Check that it matches your card.</span>
             </>
           )}
-          {barcode.kind === 'image' && (
+          {barcode.kind === 'image' && artwork && (
+            <>
+              {barcode.detectedFormat && <span>{barcode.detectedFormat}</span>}
+              {barcode.detectedValue !== undefined && <span className="preview__value">{barcode.detectedValue}</span>}
+              <span>Original artwork, shown as-is at checkout. A redrawn code is usually easier for scanners to read.</span>
+            </>
+          )}
+          {barcode.kind === 'image' && !artwork && (
             <span>
               Saved as an image because it couldn’t be redrawn
               {barcode.detectedFormat ? ` (${barcode.detectedFormat})` : ''}. Scanners may read it less reliably.

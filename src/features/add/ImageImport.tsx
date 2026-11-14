@@ -7,12 +7,18 @@
  *    to zoom, Wide or Square frame) and let the user retry on the crop.
  * 3. If the crop still can't be decoded and redrawn, the user may save the
  *    cropped image as the card's barcode — clearly labelled as a fallback.
+ * 4. When a QR code decodes, the user chooses between the redrawn QR code
+ *    (the default, usually the most reliable at checkout) and keeping the
+ *    original artwork (e.g. a branded QR with a logo or styled modules). Keeping
+ *    it reuses the same cropper and stores the crop as an `image` barcode with
+ *    the detected format and exact value kept alongside for reference.
  *
  * The object URL is released on unmount. Nothing leaves the device.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Cropper, { type Area } from 'react-easy-crop'
 import { ViewHeading } from '../../components/ViewHeading.tsx'
+import { FORMAT_SPECS } from '../barcodes/formats.ts'
 import type { CardBarcode } from '../cards/card.ts'
 import { outcomeFromDecode } from './captureOutcome.ts'
 import type { CaptureServices, LoadedImage } from './captureServices.ts'
@@ -21,14 +27,28 @@ export interface ImageImportProps {
   file: File
   services: CaptureServices
   focusOnMount: boolean
-  onCaptured: (barcode: CardBarcode) => void
+  /** `artwork` is true when the user chose to keep a decoded code's original image. */
+  onCaptured: (barcode: CardBarcode, options?: { artwork?: boolean }) => void
   onChooseAnother: () => void
 }
+
+type GeneratedBarcode = Extract<CardBarcode, { kind: 'generated' }>
 
 type State =
   | { name: 'loading' }
   | { name: 'load-failed'; message: string }
-  | { name: 'crop'; message: string; detected?: { formatLabel: string; value: string } }
+  /** A QR code decoded and redraws exactly: redrawn code or original artwork? */
+  | { name: 'decoded-qr'; barcode: GeneratedBarcode }
+  /**
+   * Cropper. `artwork` is set when cropping a successfully decoded QR code to
+   * keep its original look (no retry needed; the decoded value is known).
+   */
+  | { name: 'crop'; message: string; detected?: { formatLabel: string; value: string }; artwork?: GeneratedBarcode }
+
+/** Only QR codes offer the artwork choice: custom-styled QR artwork is common, styled 1D bars are not. */
+function offersArtwork(barcode: CardBarcode): barcode is GeneratedBarcode {
+  return barcode.kind === 'generated' && barcode.format === 'qrcode'
+}
 
 /**
  * Extra explanation when the browser alters canvas pixel reads (see
@@ -69,8 +89,10 @@ export function ImageImport({ file, services, focusOnMount, onCaptured, onChoose
         setImage(result)
         const outcome = outcomeFromDecode(await svc.decodeImage(result), svc.verify)
         if (cancelled) return
-        if (outcome.ok) latest.current.onCaptured(outcome.barcode)
-        else
+        if (outcome.ok) {
+          if (offersArtwork(outcome.barcode)) setState({ name: 'decoded-qr', barcode: outcome.barcode })
+          else latest.current.onCaptured(outcome.barcode)
+        } else
           setState({
             name: 'crop',
             message:
@@ -118,7 +140,8 @@ export function ImageImport({ file, services, focusOnMount, onCaptured, onChoose
       setBusy(false)
     }
     if (outcome.ok) {
-      onCaptured(outcome.barcode)
+      if (offersArtwork(outcome.barcode)) setState({ name: 'decoded-qr', barcode: outcome.barcode })
+      else onCaptured(outcome.barcode)
       return
     }
     setState({
@@ -136,15 +159,28 @@ export function ImageImport({ file, services, focusOnMount, onCaptured, onChoose
     setBusy(true)
     try {
       const blob = await services.cropImage(image, region)
-      onCaptured({
-        kind: 'image',
-        image: blob,
-        ...(state.detected ? { detectedFormat: state.detected.formatLabel, detectedValue: state.detected.value } : {}),
-      })
+      onCaptured(
+        {
+          kind: 'image',
+          image: blob,
+          ...(state.detected ? { detectedFormat: state.detected.formatLabel, detectedValue: state.detected.value } : {}),
+        },
+        state.artwork ? { artwork: true } : undefined,
+      )
     } catch (error) {
       setBusy(false)
       setState({ ...state, message: error instanceof Error ? error.message : 'Couldn’t crop the image.' })
     }
+  }
+
+  const keepArtwork = (barcode: GeneratedBarcode) => {
+    setFrame('square')
+    setState({
+      name: 'crop',
+      message: 'Crop to the QR code, keeping some white space around it, then save the image.',
+      detected: { formatLabel: FORMAT_SPECS[barcode.format].label, value: barcode.value },
+      artwork: barcode,
+    })
   }
 
   return (
@@ -167,6 +203,27 @@ export function ImageImport({ file, services, focusOnMount, onCaptured, onChoose
           <button type="button" className="button button--secondary" onClick={onChooseAnother}>
             Choose another image
           </button>
+        </>
+      )}
+
+      {state.name === 'decoded-qr' && (
+        <>
+          <p className="notice" role="status">
+            Found a QR code.
+          </p>
+          <p className="import__value">{state.barcode.value}</p>
+          <p className="field__hint">
+            A redrawn QR code is usually the most reliable at checkout. Keep the original artwork if you prefer the card’s own
+            design (for example a logo inside the code).
+          </p>
+          <div className="button-row">
+            <button type="button" className="button button--primary" onClick={() => onCaptured(state.barcode)}>
+              Use redrawn QR code
+            </button>
+            <button type="button" className="button button--secondary" onClick={() => keepArtwork(state.barcode)}>
+              Keep original artwork
+            </button>
+          </div>
         </>
       )}
 
@@ -217,14 +274,25 @@ export function ImageImport({ file, services, focusOnMount, onCaptured, onChoose
               ))}
             </div>
           </div>
-          <div className="button-row">
-            <button type="button" className="button button--primary" onClick={retry} aria-disabled={busy}>
-              {busy ? 'Working…' : 'Try again'}
-            </button>
-            <button type="button" className="button button--secondary" onClick={saveAsImage} aria-disabled={busy}>
-              Save cropped image
-            </button>
-          </div>
+          {state.artwork ? (
+            <div className="button-row">
+              <button type="button" className="button button--primary" onClick={saveAsImage} aria-disabled={busy}>
+                {busy ? 'Working…' : 'Save cropped image'}
+              </button>
+              <button type="button" className="button button--secondary" onClick={() => state.artwork && onCaptured(state.artwork)}>
+                Use redrawn QR code
+              </button>
+            </div>
+          ) : (
+            <div className="button-row">
+              <button type="button" className="button button--primary" onClick={retry} aria-disabled={busy}>
+                {busy ? 'Working…' : 'Try again'}
+              </button>
+              <button type="button" className="button button--secondary" onClick={saveAsImage} aria-disabled={busy}>
+                Save cropped image
+              </button>
+            </div>
+          )}
           <p className="field__hint">
             A saved image is shown as-is at checkout. A redrawn barcode is usually easier for scanners to read.
           </p>

@@ -1,0 +1,14 @@
+/*
+ * Type-checks host-only test code that needs Node APIs (reading fixture image
+ * files): src/test/node and *.node.test.ts. Kept apart from tsconfig.app.json
+ * so application code can never type-check against Node globals by accident.
+ */
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test-node.tsbuildinfo",
+    "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom/vitest"]
+  },
+  "include": ["src/test/node", "src/**/*.node.test.ts"],
+  "exclude": []
+}

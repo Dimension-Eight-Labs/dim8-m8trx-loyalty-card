@@ -321,8 +321,9 @@ describe('still-image decode cascade', () => {
     const blank: GreyBitmap = { width: 900, height: 600, data: new Uint8ClampedArray(900 * 600).fill(240) }
     const before = blank.data.slice()
     const outcome = await decodeWithCascade(blank, noPause)
-    // Quarter size (225 px) is below the useful minimum and is skipped.
-    expect(outcome).toMatchObject({ result: { status: 'not-found' }, timedOut: false, attempts: IMAGE_CASCADE.length - 1 })
+    // Skipped as too small for a 900 px image: qr-quarter and qr-sixth (below
+    // the 300 px sweep minimum) and quarter-size (below the 400 px minimum).
+    expect(outcome).toMatchObject({ result: { status: 'not-found' }, timedOut: false, attempts: IMAGE_CASCADE.length - 3 })
     expect(blank.data).toEqual(before)
   })
 })

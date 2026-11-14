@@ -71,7 +71,19 @@ export async function loadImage(file: Blob): Promise<LoadedImage> {
   return loaded
 }
 
-function drawRegion(image: LoadedImage, area: PixelArea | undefined, maxSide: number): HTMLCanvasElement {
+/**
+ * Draws (part of) the image onto a new canvas.
+ *
+ * `whiteUnderlay` paints the canvas white first so transparent areas become
+ * white in the saved fallback PNG. The decode path does NOT use it (v0.3.2):
+ * rgbaToGrey already composites transparent pixels onto white, and reading
+ * back only image pixels keeps the import path identical to the live camera
+ * path (drawImage + getImageData), which is known to work on iPhone. Script-
+ * drawn canvas content such as fillRect is what browser fingerprinting
+ * protections (e.g. Safari's Advanced Fingerprinting Protection) may perturb
+ * on readback; whether that affected imports on iPhone is unverified.
+ */
+function drawRegion(image: LoadedImage, area: PixelArea | undefined, maxSide: number, whiteUnderlay: boolean): HTMLCanvasElement {
   const element = imageElements.get(image)
   if (!element) throw new ImageLoadError()
   const region = area ?? { x: 0, y: 0, width: image.width, height: image.height }
@@ -81,24 +93,27 @@ function drawRegion(image: LoadedImage, area: PixelArea | undefined, maxSide: nu
   canvas.height = Math.max(1, Math.round(region.height * scale))
   const context = canvas.getContext('2d', { willReadFrequently: true })
   if (!context) throw new ImageLoadError('This browser can’t process images.')
-  // White underlay so transparent screenshots decode as dark-on-light.
-  context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, canvas.width, canvas.height)
+  if (whiteUnderlay) {
+    context.fillStyle = '#ffffff'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+  }
   context.drawImage(element, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height)
   return canvas
 }
 
 /**
  * Decodes the whole image, or a cropped region of it, trying the bounded
- * cascade of views in decodeCascade.ts (original, smaller, contrast, rotated,
- * threshold, inverted…). The loaded image and its object URL are never
- * modified; every view is a temporary in-memory bitmap.
+ * cascade of views in decodeCascade.ts: the original pixels first (every
+ * format), then a cheap QR sweep (threshold and integer downscales), then
+ * all-format fallbacks (smaller, contrast, rotated, threshold, inverted…).
+ * The loaded image and its object URL are never modified; every view is a
+ * temporary in-memory bitmap.
  */
 export async function decodeImage(image: LoadedImage, area?: PixelArea): Promise<DecodeResult> {
   // Yield once so the "Looking for a barcode…" state paints before the
   // first synchronous decode (which can take a few hundred ms on large images).
   await new Promise((resolve) => setTimeout(resolve, 0))
-  const canvas = drawRegion(image, area, DECODE_MAX_SIDE)
+  const canvas = drawRegion(image, area, DECODE_MAX_SIDE, false)
   const context = canvas.getContext('2d') as CanvasRenderingContext2D
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height)
   const base = rgbaToGrey(pixels.data, canvas.width, canvas.height)
@@ -115,7 +130,7 @@ export async function decodeImage(image: LoadedImage, area?: PixelArea): Promise
 
 /** Cropped PNG for the image fallback. */
 export function cropImage(image: LoadedImage, area: PixelArea): Promise<Blob> {
-  const canvas = drawRegion(image, area, FALLBACK_MAX_SIDE)
+  const canvas = drawRegion(image, area, FALLBACK_MAX_SIDE, true)
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new ImageLoadError('Couldn’t crop the image.'))), 'image/png')
   })

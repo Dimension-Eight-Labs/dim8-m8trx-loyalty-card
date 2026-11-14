@@ -368,7 +368,8 @@
 /* ---- Wallet ---------------------------------------------------------------
  * Square tiles in a responsive grid: two columns on phones (each tile about
  * the size of a thumb-friendly physical card), more as width allows.
- * Tile backgrounds come from the card's palette colour (inline style).
+ * Tile backgrounds come from the card's palette colour (inline style), which
+ * also sets `--tile-accent` for the miniature card's bands.
  */
 .wallet-grid {
   display: grid;
@@ -388,10 +389,13 @@
 
 .tile__open {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
   width: 100%;
   height: 100%;
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-3) var(--space-4) var(--space-4);
   border: 0;
   background: linear-gradient(160deg, rgb(255 255 255 / 0.12), transparent 55%);
   color: inherit;
@@ -420,9 +424,9 @@
   line-height: 1.15;
   letter-spacing: -0.01em;
   overflow-wrap: anywhere;
-  /* Long names wrap to at most four lines rather than overflowing the square. */
+  /* Long names wrap to at most two lines (the preview takes the top half). */
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -452,6 +456,71 @@
 .tile__more:focus-visible {
   outline-color: currentColor;
   outline-offset: -3px;
+}
+
+/*
+ * Miniature card preview (CardPreview.tsx): a white card with accent bands,
+ * like a tiny checkout screen. Width leaves room for the ⋯ button in the
+ * tile's top-right corner; the credit-card aspect ratio (85.6 × 54 mm) makes
+ * it read as a card. The thin dark outline keeps it distinct on the light
+ * "White" palette colour. Motif ink is fixed dark grey on white.
+ */
+.card-preview {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: calc(100% - 2.25rem);
+  max-width: 8.5rem;
+  aspect-ratio: 1.586;
+  border-radius: 0.4rem;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.14), 0 0.25rem 0.6rem rgb(0 0 0 / 0.25);
+  pointer-events: none;
+}
+
+.card-preview__band {
+  flex: none;
+  height: 16%;
+  /* Slightly darker than the tile itself so the band reads as part of the card. */
+  background: linear-gradient(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.16)), var(--tile-accent, #5f6368);
+}
+
+.card-preview__band--bottom {
+  height: 7%;
+}
+
+.card-preview__body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 7% 10%;
+}
+
+.card-preview__motif {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.card-preview__motif--wide {
+  width: 100%;
+  height: 100%;
+}
+
+.card-preview__motif--square {
+  height: 100%;
+  aspect-ratio: 1;
+}
+
+.card-preview__image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
 }
 
 /* ---- Card menu ------------------------------------------------------------ */
@@ -544,9 +613,15 @@
 }
 
 /* ---- Checkout ------------------------------------------------------------
- * Full-screen white presentation. `checkout-open` on <html> freezes the page
- * underneath (no scroll, no rubber-band); touch-action on the stage stops the
- * browser from scrolling or zooming while the user swipes.
+ * Full-screen digital card: a narrow accent header (store name + ×), a white
+ * stage for the barcode, and a narrow matching accent strip at the bottom.
+ * Accent and text colours arrive as --card-accent / --card-on-accent from the
+ * tile palette (every pair ≥ 4.5:1, WCAG AA). The bands extend under the
+ * notch / home indicator (safe-area insets) so they read as edge-to-edge
+ * bands, while their content stays inside the safe area.
+ * `checkout-open` on <html> freezes the page underneath (no scroll, no
+ * rubber-band); touch-action on the stage stops the browser from scrolling or
+ * zooming while the user swipes.
  */
 html.checkout-open,
 html.checkout-open body {
@@ -562,30 +637,44 @@ html.checkout-open body {
   flex-direction: column;
   background: #ffffff;
   color: #5f6368;
-  padding:
-    max(var(--space-2), env(safe-area-inset-top))
-    max(var(--space-2), env(safe-area-inset-right))
-    max(var(--space-3), env(safe-area-inset-bottom))
-    max(var(--space-2), env(safe-area-inset-left));
   color-scheme: light;
 }
 
 .checkout__top {
+  flex: none;
   display: grid;
   grid-template-columns: var(--touch-target) 1fr var(--touch-target);
   align-items: center;
   min-height: var(--touch-target);
+  padding:
+    max(var(--space-1), env(safe-area-inset-top))
+    max(var(--space-2), env(safe-area-inset-right))
+    var(--space-1)
+    max(var(--space-2), env(safe-area-inset-left));
+  background: var(--card-accent, #455a64);
+  color: var(--card-on-accent, #ffffff);
+  /* Hairline edge: keeps very light accents (e.g. White) distinct from the stage. */
+  box-shadow: inset 0 -1px rgb(0 0 0 / 0.1);
 }
 
 .checkout__store {
   grid-column: 2;
   text-align: center;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: clamp(1.25rem, 5.6vw, 1.75rem);
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Narrow strip matching the header; grows by the home-indicator inset. */
+.checkout__bottom {
+  flex: none;
+  height: calc(var(--space-3) + env(safe-area-inset-bottom));
+  background: var(--card-accent, #455a64);
+  box-shadow: inset 0 1px rgb(0 0 0 / 0.1);
 }
 
 .checkout__close {
@@ -597,24 +686,32 @@ html.checkout-open body {
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: #5f6368;
+  color: inherit;
   cursor: pointer;
 }
 
 .checkout__close:hover {
-  background: #f1f3f4;
+  background: rgb(0 0 0 / 0.14);
 }
 
 .checkout :focus-visible {
   outline-color: #1a73e8;
 }
 
+/* On the accent band, a blue ring may vanish (e.g. on Blue); use the band's text colour. */
+.checkout__top :focus-visible {
+  outline-color: currentColor;
+  outline-offset: -3px;
+}
+
+/* Generous white space around the code; the code's own quiet zone is inside the image. */
 .checkout__stage {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 0;
+  padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) var(--space-4) max(var(--space-4), env(safe-area-inset-left));
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -634,6 +731,8 @@ html.checkout-open body {
 }
 
 .checkout__nav {
+  flex: none;
+  padding-bottom: var(--space-2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -831,6 +930,14 @@ html.checkout-open body {
   min-height: 1.5em;
   color: var(--color-text-muted);
   text-align: center;
+}
+
+/* Decoded QR value on the "redrawn or original artwork" choice screen. */
+.import__value {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .scanner__problem {

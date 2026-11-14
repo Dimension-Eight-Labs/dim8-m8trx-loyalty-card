@@ -1,5 +1,6 @@
 /**
- * One square wallet tile: the store name on the card's colour.
+ * One square wallet tile: a miniature card preview (CardPreview) and the store
+ * name on the card's colour.
  *
  * Interaction:
  * - Tap / click / Enter / Space on the tile opens the card at checkout.
@@ -8,12 +9,15 @@
  *   accessible, discoverable alternative to long-press for keyboard, switch,
  *   and screen-reader users, and for anyone who doesn't know about long-press.
  *
- * Deliberately shows nothing else: no number, dates, or notes.
+ * Deliberately shows nothing else: no number, dates, or notes. The preview is
+ * decorative (aria-hidden) and never encodes the card's value, so the tile's
+ * accessible name remains just the store name.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { MoreIcon } from '../../components/icons.tsx'
 import type { LoyaltyCard } from '../cards/card.ts'
 import { tileColor } from '../cards/tileColors.ts'
+import { CardPreview } from './CardPreview.tsx'
 import { useLongPress } from './useLongPress.ts'
 
 export interface CardTileProps {
@@ -39,7 +43,7 @@ export function CardTile({ card, onOpen, onOpenMenu, autoFocus = false }: CardTi
   }, [autoFocus])
 
   return (
-    <li className="tile" style={{ background: colors.background, color: colors.text }}>
+    <li className="tile" style={{ background: colors.background, color: colors.text, '--tile-accent': colors.background } as CSSProperties}>
       <button
         ref={tileRef}
         type="button"
@@ -47,6 +51,7 @@ export function CardTile({ card, onOpen, onOpenMenu, autoFocus = false }: CardTi
         onClick={() => onOpen(card.id)}
         {...longPress}
       >
+        <CardPreview card={card} />
         <span className="tile__name">{card.storeName}</span>
       </button>
       <button

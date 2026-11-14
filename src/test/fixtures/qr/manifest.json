@@ -1,0 +1,54 @@
+{
+  "plain-qrencode.png": {
+    "value": "https://example.com/loyalty?member=000123456&src=App",
+    "note": "Plain QR, 8 px modules, 4-module quiet zone"
+  },
+  "screenshot-app-card.png": {
+    "value": "MEMBER 0001234567 Gold",
+    "note": "Phone screenshot: QR on an app card with a 2-module quiet zone, UI text around it"
+  },
+  "screenshot-dark-app.png": {
+    "value": "MEMBER 0001234567 Gold",
+    "note": "Dark app chrome around a white card; 1-module quiet zone"
+  },
+  "screenshot-logo-artwork.png": {
+    "value": "https://example.com/loyalty?member=000123456&src=App",
+    "note": "Custom artwork: high-EC QR with a centred logo"
+  },
+  "screenshot-dots-artwork.png": {
+    "value": "https://example.com/loyalty?member=000123456&src=App",
+    "note": "Custom artwork: round dot modules, navy data, red finder patterns"
+  },
+  "screenshot-rounded-artwork.png": {
+    "value": "MEMBER 0001234567 Gold",
+    "note": "Custom artwork: rounded green modules"
+  },
+  "screenshot-exact-whitespace.png": {
+    "value": "  0000123  case-Sensitive  ",
+    "note": "Value with leading/trailing spaces, leading zeros and mixed case"
+  },
+  "screenshot-dark-mode-inverted.png": {
+    "value": "MEMBER 0001234567 Gold",
+    "note": "Dark mode: light modules on black (needs inversion)"
+  },
+  "photo-jpeg-q50.png": {
+    "value": "https://example.com/loyalty?member=000123456&src=App",
+    "note": "Downscaled, blurred, JPEG quality 50 copy of the logo screenshot"
+  },
+  "transparent-background.png": {
+    "value": "MEMBER 0001234567 Gold",
+    "note": "RGBA: dark modules on a fully transparent background (decoded as if on white)"
+  },
+  "screenshot-upscaled-smooth.png": {
+    "value": "https://example.com/loyalty?member=000123456&src=App",
+    "note": "Small QR bitmap enlarged 5x with bilinear smoothing inside a screenshot (soft module edges)"
+  },
+  "screenshot-upscaled-smooth-large.png": {
+    "value": "https://example.com/loyalty?member=000123456&src=App",
+    "note": "Small QR bitmap enlarged 7x with bilinear smoothing inside a screenshot (soft module edges)"
+  },
+  "photo-noisy-card.png": {
+    "value": "https://example.com/loyalty?member=000123456&src=App",
+    "note": "Photographed card: tilted, blurred, sensor noise, JPEG quality 80"
+  }
+}
