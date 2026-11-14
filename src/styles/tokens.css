@@ -2,56 +2,93 @@
  * Design tokens: the single place for colour, spacing, type, and shape values.
  *
  * Dark-first: the app is always dark (index.html declares color-scheme: dark).
- * The accent is used sparingly, for the primary action and focus only.
+ *
+ * Palette (v0.4.2): the official DIM8 Labs palette, taken from the DIM8
+ * website stylesheets and supplied as authoritative for this iteration. The
+ * raw DIM8 values are declared once as --dim8-* below; the semantic tokens
+ * the components use (--color-*) point at them. Only --color-surface-hover is
+ * derived (not in the DIM8 reference): a step between raised surface and
+ * border, so hovered rows stay distinguishable.
  *
  * --color-bg is mirrored in vite.config.ts (manifest theme/background colour)
- * and index.html (theme-color); change them together.
+ * and index.html (theme-color and the pre-CSS html background); change them
+ * together. --color-brand-rgb is repeated literally in the backdrop SVG in
+ * app.css, which cannot read custom properties.
  *
  * Contrast (WCAG 2.x ratios, computed from these hex values):
- *   text          on bg 16.4, surface 15.0, raised 13.4, hover 12.2
- *   text-muted    on bg 8.1,  surface 7.4,  raised 6.6,  hover 6.0
- *   accent        on bg 9.0,  surface 8.3 (focus ring, active row marker)
- *   brand         = accent (branded checkout title)
- *   on-accent     on accent 8.9, accent-hover 10.9 (primary button label)
- *   danger        on bg 8.4,  surface 7.6,  raised 6.8,  danger-surface 7.5
+ *   text          on bg 17.9, surface 16.8, raised 15.7, hover 14.2
+ *   text-body     on bg 13.2, surface 12.4, raised 11.6, hover 10.5
+ *   text-muted    on bg 8.0,  surface 7.5,  raised 7.0,  hover 6.3
+ *   accent/brand  on bg 14.3, surface 13.4, raised 12.6 (focus ring, brand
+ *                 text, active markers)
+ *   on-accent     on accent 14.3, accent-hover 17.9 (primary button label)
+ *   danger        on bg 9.1,  surface 8.6,  raised 8.0,  danger-surface 7.5
  *   on-danger     on danger 8.4, danger-hover 10.3 (destructive confirm label)
- *   border-strong on bg 3.9,  surface 3.6,  raised 3.2 (input outlines and
+ *   border-strong on bg 5.0,  surface 4.7,  raised 4.4 (input outlines and
  *                 secondary button edges; WCAG 1.4.11 needs 3:1)
+ *   border        is decorative (≈1.3:1); never the only cue for a control.
  * All text pairs exceed AA (4.5:1); non-text UI pairs meet 3:1.
  */
 :root {
   color-scheme: dark;
 
-  --color-bg: #0e1013;
-  --color-surface: #171a1f;
-  --color-surface-raised: #20242b;
-  --color-surface-hover: #262b33;
-  --color-text: #eceef1;
-  --color-text-muted: #a3a9b3;
-  --color-border: #2c313a;
-  --color-border-strong: #6b7280;
-  --color-accent: #8ab4f8;
-  --color-accent-hover: #a8c7fa;
-  --color-on-accent: #0b1220;
-  --color-focus: #8ab4f8;
+  /* ---- Official DIM8 Labs palette (authoritative raw values) ---- */
+  --dim8-vfd: #b8ddd7;
+  --dim8-vfd-bright: #d6f4ef;
+  --dim8-vfd-dim: #5d837e;
+  --dim8-vfd-secondary: #97b5b0;
+  --dim8-vfd-glow: rgb(140 220 206 / 38%);
+  --dim8-bg: #010100;
+  --dim8-surface: #0a0c0d;
+  --dim8-surface-raised: #111517;
+  --dim8-text: #eceeec;
+  --dim8-text-body: #c9cfcd;
+  --dim8-text-muted: #96a3a0;
+  --dim8-border: #1c2426;
+
+  /* ---- Semantic colour tokens used by components ---- */
+  --color-bg: var(--dim8-bg);
+  --color-surface: var(--dim8-surface);
+  --color-surface-raised: var(--dim8-surface-raised);
+  --color-surface-hover: #182022;
+  --color-text: var(--dim8-text);
+  --color-text-body: var(--dim8-text-body);
+  --color-text-muted: var(--dim8-text-muted);
+  --color-border: var(--dim8-border);
+  --color-border-strong: var(--dim8-vfd-dim);
+  --color-accent: var(--dim8-vfd);
+  --color-accent-hover: var(--dim8-vfd-bright);
+  --color-on-accent: var(--dim8-bg);
+  --color-focus: var(--dim8-vfd);
   /*
-   * Brand (DIM8 / VFD-style) colour for branded text and the M8TRX backdrop
-   * traces. No authoritative DIM8 VFD colour is defined in this repository,
-   * so it deliberately reuses the existing accent (9.0:1 on --color-bg);
-   * replace both values together if a brand colour is supplied. The RGB
-   * triplet exists for translucent uses (rgb(var(--color-brand-rgb) / a)).
-   * The backdrop SVG in app.css cannot read custom properties and repeats
-   * this triplet literally.
+   * Brand (DIM8 VFD) colours for branded text (M8TRX header, checkout card
+   * title), navigation accents and the M8TRX backdrop traces. The RGB
+   * triplets exist for translucent uses (rgb(var(--color-brand-rgb) / a)).
    */
-  --color-brand: #8ab4f8;
-  --color-brand-rgb: 138 180 248;
+  --color-brand: var(--dim8-vfd);
+  --color-brand-rgb: 184 221 215;
+  --color-brand-bright: var(--dim8-vfd-bright);
+  --color-brand-dim: var(--dim8-vfd-dim);
+  --color-brand-secondary: var(--dim8-vfd-secondary);
+  --color-glow: var(--dim8-vfd-glow);
+  --color-glow-rgb: 140 220 206;
   --color-danger: #ff8a80;
   --color-danger-hover: #ffa79f;
   --color-on-danger: #1a0b0a;
   --color-danger-surface: #2a1715;
-  --color-backdrop: rgb(4 5 7 / 0.72);
+  --color-backdrop: rgb(1 1 0 / 0.72);
 
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Official DIM8 body font stack: the application font. */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Official DIM8 wordmark font stack. */
+  --font-wordmark: 'Avenir Next', 'Segoe UI', Helvetica, Arial, sans-serif;
+  /*
+   * Typography hook for the official DIM8 seven-segment font, used by the
+   * M8TRX header. The font is not in this repository yet and must not be
+   * substituted; until it is supplied (with an @font-face rule) this falls
+   * back to the wordmark stack. Integrate it by prefixing its family here.
+   */
+  --font-segment: var(--font-wordmark);
   /* Card numbers: monospace so similar glyphs (0/O, 1/l) line up and are easy to read aloud. */
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
   --font-size-xs: 0.8125rem;

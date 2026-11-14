@@ -7,7 +7,7 @@ The product does one job on purpose. It has **no accounts, advertisements,
 analytics, cloud backend, or synchronization**, and it loads nothing from
 third-party hosts.
 
-## Current status (v0.4.1 card wallet, development)
+## Current status (v0.4.2 card wallet, development)
 
 Capture a physical loyalty card once, then show a clean, freshly drawn barcode
 at checkout.
@@ -21,10 +21,12 @@ at checkout.
   opens **Rename**, **Change colour**, **Move earlier / later / to first /
   to last** (the keyboard-accessible way to reorder), and **Delete** (with
   confirmation). A small **+** in the top corner adds a card.
-- **Checkout mode**: the card floats as a centred, card-shaped white tile
-  (thin bands in the card's colour, barcode scaled to fit) on a dark stage
-  with the subtle M8TRX circuit backdrop. The store name sits near the
-  bottom in the brand colour, directly above the pagination chevrons; a
+- **Checkout mode**: an **M8TRX** title at the top, then the store name
+  (in the DIM8 VFD colour) immediately above the card, which floats as a
+  centred white tile (thin bands in the card's colour, barcode scaled to
+  fit) on a dark stage with the subtle M8TRX circuit backdrop. Linear codes
+  use a compact credit-card face; QR codes (redrawn or saved artwork) use a
+  larger near-square face. Pagination chevrons and dots are at the bottom; a
   small **×** is in the top corner. Close with the **×**, Escape, or a deliberate swipe
   down. Swipe left/right (or use ←/→ or the small chevrons) to move between
   cards; navigation stops at the first/last card. Page scrolling is locked, and the
@@ -44,8 +46,55 @@ at checkout.
   store name, pick a tile colour, and save.
 - Cards are stored on the device in IndexedDB. Existing v0.2.0 cards are
   migrated automatically and are never deleted.
-- Dark interface, keyboard accessible; no accounts, backend, analytics, or
+- Dark interface in the official DIM8 Labs palette, keyboard accessible; no accounts, backend, analytics, or
   third-party requests.
+
+### v0.4.2 — QR sizing, checkout layout and DIM8 palette (Iteration 4E)
+
+Development version; not published or deployed.
+
+- **Card shape follows the barcode** (`barcodes/presentation.ts`, exposed as
+  `data-presentation` on the card face):
+  - `square` — QR, Data Matrix and Aztec, both redrawn and **saved custom
+    artwork** whose detected format is one of these. A near-square face
+    (0.93, up to 20 rem wide) gives the symbol roughly 50% more height than
+    v0.4.1 on common phones (about 230 px wide code area at 320 px, 290 px at
+    375 px, CSS-derived; checked in headless Firefox, not measured on a
+    phone). Artwork keeps its aspect ratio (letterboxed on white, never
+    stretched, cropped or recoloured).
+  - `stacked` — PDF417 keeps the slightly taller v0.4.1 face. It is never
+    treated as QR.
+  - `card` — linear codes, imported images with an unknown or non-square
+    detected format, and text-only cards keep the compact credit-card face.
+  The shape is decided from the stored/detected format only, never from an
+  image's pixel shape.
+- **Store name immediately above the card** (it moves with the card while
+  dragging), in the app font and DIM8 VFD colour. Long names wrap to two
+  lines (one in short landscape) and are then clamped visually; the dialog's
+  accessible name is always the complete name. The pagination stays at the
+  bottom.
+- **M8TRX header** centred at the top, balanced against the × by an equal
+  spacer. It uses the `--font-segment` token, a hook for the official DIM8
+  seven-segment font (not yet supplied; falls back to the DIM8 wordmark stack
+  `"Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif`). It is
+  decorative (`aria-hidden`); screen readers still hear the card name.
+- **Official DIM8 Labs palette** applied app-wide through `tokens.css`: raw
+  `--dim8-*` values from the DIM8 website stylesheets (background `#010100`,
+  surfaces `#0A0C0D` / `#111517`, text `#ECEEEC` / `#C9CFCD` / `#96A3A0`,
+  border `#1C2426`, VFD `#B8DDD7` / `#D6F4EF` / `#5D837E` / `#97B5B0`, glow
+  `rgb(140 220 206 / 38%)`) mapped onto the existing semantic `--color-*`
+  tokens. The body font is the DIM8 body stack. The circuit backdrop keeps
+  its geometry and opacities but is drawn in the VFD colour; browser/PWA
+  theme colours follow the new background. Loyalty-card colours, card
+  artwork and barcodes are unchanged.
+- The DIM8 logo, seven-segment font and app icons are deferred to the final
+  branding pass (the icons still use the original placeholder artwork).
+- No IndexedDB schema change; no new dependencies.
+
+Checked in headless desktop Firefox at 320×568, 375×667, 390×844 and
+667×375 (QR, imported QR artwork, PDF417, Code 128, long names, wallet
+backdrop). **Not yet checked on an iPhone or with a checkout scanner** (see
+the v0.4.2 checklist below).
 
 ### v0.4.1 — Checkout stage redesign
 
@@ -396,6 +445,7 @@ src/
                             interface, useCards controller, ColorPicker,
                             DeleteCardDialog, CardEmptyState
     barcodes/               formats.ts (format registry), render.ts (bwip-js SVG),
+                            presentation.ts (checkout card-face shape),
                             rasterize.ts (pure bitmap renderer), decode.ts (ZXing),
                             verify.ts (round-trip check), zxingPatches.ts
                             (Code 128 library fix), bitmapTransforms.ts (pure
@@ -503,6 +553,21 @@ results.
 9. **Import** the original UDF and Kroger screenshots; then test a rotated
    copy and the crop-and-retry path.
 
+**v0.4.2 checks on iPhone (not yet performed).**
+
+1. **QR size.** Open a redrawn QR card and a saved-artwork QR card on the
+   narrowest iPhone (SE / mini) and a large one, portrait and landscape: the
+   near-square card is fully visible, the code is centred with white space
+   around it, and artwork is not stretched or cropped. Swipe to a linear card:
+   it returns to the compact face.
+2. **Layout.** M8TRX is centred and clear of the notch / Dynamic Island; the
+   store name sits directly above the card (a long name wraps to two lines)
+   and never overlaps M8TRX or the card; the chevrons stay at the bottom.
+3. **Scanning.** Scan the larger QR (redrawn and artwork) and a linear code
+   with real checkout hardware, at normal and reduced brightness.
+4. **Palette.** The DIM8 colours read well on the phone's display; text and
+   inputs remain legible across the wallet, add-card and dialogs.
+
 **v0.4.1 checks on iPhone (not yet performed).**
 
 1. **Dark stage.** Open cards in dark (Slate), bright (Red) and light
@@ -607,7 +672,8 @@ The icons still use the original blue accent (`#1f4fd8`) and were not
 regenerated for the dark theme; that artwork is unchanged pending brand
 assets.
 
-The page background colour (`#0e1013`) appears in three places. Keep them in
+The page background colour (`#010100`, the official DIM8 background)
+appears in three places. Keep them in
 sync: `--color-bg` in `src/styles/tokens.css`, `THEME_COLOR` /
 `BACKGROUND_COLOR` in `vite.config.ts`, and `theme-color` plus the inline
 `<html>` background in `index.html` (which prevents a light flash before the

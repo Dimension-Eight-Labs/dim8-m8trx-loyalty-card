@@ -24,9 +24,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // Colours shared by the manifest and index.html. The app is dark-first, so the
 // browser/OS chrome and splash screen use the page background colour.
-// Keep in sync with --color-bg in src/styles/tokens.css and index.html.
-const THEME_COLOR = '#0e1013'
-const BACKGROUND_COLOR = '#0e1013'
+// Keep in sync with --color-bg (the official DIM8 background, --dim8-bg) in
+// src/styles/tokens.css and index.html.
+const THEME_COLOR = '#010100'
+const BACKGROUND_COLOR = '#010100'
 
 export default defineConfig({
   plugins: [

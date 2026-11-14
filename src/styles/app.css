@@ -32,9 +32,11 @@
  * wallet's layer is position: fixed so it covers the whole viewport even
  * though .app-shell itself is width-limited and centred; checkout's layer
  * fills the checkout overlay (which is an isolated stacking context).
- * Trace colour is the --color-brand triplet (SVG data URLs cannot read
- * custom properties); each trace is drawn twice, wide and faint then thin,
- * for a subtle glow without SVG filters.
+ * Colours (v0.4.2): traces use the --color-brand triplet (DIM8 primary
+ * VFD), repeated literally because SVG data URLs cannot read custom
+ * properties; the top glow uses the DIM8 VFD glow hue. Geometry and opacities
+ * are unchanged from v0.4.1. Each trace is drawn twice, wide and faint then
+ * thin, for a subtle glow without SVG filters.
  */
 .app-shell::before,
 .checkout::before {
@@ -44,8 +46,8 @@
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 90% 55% at 50% 0%, rgb(var(--color-brand-rgb) / 0.09), transparent 70%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='rgb(138,180,248)' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg stroke-width='3' stroke-opacity='0.05'%3E%3Cpath d='M168 0V36L188 56H240M0 56H64L84 76H129M24 240V196L44 176H96L116 156V131M240 150H212L196 166V240M0 150H27M24 0V15M196 0V11M168 240V219'/%3E%3C/g%3E%3Cg stroke-width='1' stroke-opacity='0.18'%3E%3Cpath d='M168 0V36L188 56H240M0 56H64L84 76H129M24 240V196L44 176H96L116 156V131M240 150H212L196 166V240M0 150H27M24 0V15M196 0V11M168 240V219'/%3E%3Ccircle cx='132' cy='76' r='3'/%3E%3Ccircle cx='116' cy='128' r='3'/%3E%3Ccircle cx='30' cy='150' r='3'/%3E%3Ccircle cx='24' cy='18' r='3'/%3E%3Ccircle cx='196' cy='14' r='3'/%3E%3Ccircle cx='168' cy='216' r='3'/%3E%3C/g%3E%3Cg fill='rgb(138,180,248)' fill-opacity='0.12' stroke='none'%3E%3Crect x='70' y='112' width='3' height='3'/%3E%3Crect x='76' y='112' width='3' height='3'/%3E%3Crect x='76' y='118' width='3' height='3'/%3E%3Crect x='212' y='96' width='3' height='3'/%3E%3Crect x='218' y='102' width='3' height='3'/%3E%3Crect x='140' y='196' width='3' height='3'/%3E%3C/g%3E%3C/svg%3E")
+    radial-gradient(ellipse 90% 55% at 50% 0%, rgb(var(--color-glow-rgb) / 0.09), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' fill='none' stroke='rgb(184,221,215)' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg stroke-width='3' stroke-opacity='0.05'%3E%3Cpath d='M168 0V36L188 56H240M0 56H64L84 76H129M24 240V196L44 176H96L116 156V131M240 150H212L196 166V240M0 150H27M24 0V15M196 0V11M168 240V219'/%3E%3C/g%3E%3Cg stroke-width='1' stroke-opacity='0.18'%3E%3Cpath d='M168 0V36L188 56H240M0 56H64L84 76H129M24 240V196L44 176H96L116 156V131M240 150H212L196 166V240M0 150H27M24 0V15M196 0V11M168 240V219'/%3E%3Ccircle cx='132' cy='76' r='3'/%3E%3Ccircle cx='116' cy='128' r='3'/%3E%3Ccircle cx='30' cy='150' r='3'/%3E%3Ccircle cx='24' cy='18' r='3'/%3E%3Ccircle cx='196' cy='14' r='3'/%3E%3Ccircle cx='168' cy='216' r='3'/%3E%3C/g%3E%3Cg fill='rgb(184,221,215)' fill-opacity='0.12' stroke='none'%3E%3Crect x='70' y='112' width='3' height='3'/%3E%3Crect x='76' y='112' width='3' height='3'/%3E%3Crect x='76' y='118' width='3' height='3'/%3E%3Crect x='212' y='96' width='3' height='3'/%3E%3Crect x='218' y='102' width='3' height='3'/%3E%3Crect x='140' y='196' width='3' height='3'/%3E%3C/g%3E%3C/svg%3E")
       center / 240px 240px,
     repeating-linear-gradient(0deg, rgb(var(--color-brand-rgb) / 0.025) 0 1px, transparent 1px 24px),
     repeating-linear-gradient(90deg, rgb(var(--color-brand-rgb) / 0.025) 0 1px, transparent 1px 24px),
@@ -737,18 +739,19 @@
 }
 
 /* ---- Checkout ------------------------------------------------------------
- * A dark branded stage with the card floating in the middle (v0.4.1):
+ * A dark branded stage with the card floating in the middle (v0.4.2):
  * - Outer surface: always the dark app background plus the shared M8TRX
  *   backdrop (see "M8TRX backdrop" above). The accent colour is NOT used
- *   outside the card any more, so the notch / home-indicator areas show the
- *   same dark colour whatever card is active; html/body are painted with
- *   --color-bg while open for the same reason.
- * - Card face: a white card-shaped tile (85.6 × 54 mm ratio, a little taller
- *   for square 2D codes) with thin accent bands, sized to fit the stage with comfortable space
- *   around it in portrait and short landscape. Its accent arrives as
+ *   outside the card, so the notch / home-indicator areas show the same dark
+ *   colour whatever card is active; html/body are painted with --color-bg
+ *   while open for the same reason.
+ * - Top bar: the M8TRX header centred between a spacer and the ×.
+ * - Stage: the store name directly above the card face, centred as a group.
+ * - Card face: white, with thin accent bands; shape chosen per barcode via
+ *   data-presentation (see barcodes/presentation.ts). Its accent arrives as
  *   --card-accent inline on .checkout__face only.
- * - Bottom information region: store name in the brand colour directly above
- *   the pagination arrows and dots.
+ * - Bottom: pagination arrows and dots.
+ * Brand text, navigation accents and glows use the DIM8 tokens only.
  * Content stays inside the safe area via padding on .checkout itself.
  * `checkout-open` on <html> freezes the page underneath (no scroll, no
  * rubber-band); touch-action on the stage stops the browser from scrolling or
@@ -762,6 +765,13 @@ html.checkout-open body {
 }
 
 .checkout {
+  /*
+   * Height reserved above the card for the store name: two lines at the
+   * largest title size (1.3125rem × 1.25 line-height × 2 ≈ 3.3rem) plus the
+   * gap. The card's height budget subtracts it, so a wrapped name never
+   * pushes the card out of the stage. Reduced on very short screens below.
+   */
+  --checkout-title-reserve: 3.8rem;
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -775,11 +785,39 @@ html.checkout-open body {
   color: var(--color-text);
 }
 
+/*
+ * Three equal outer columns (spacer | title | ×) keep M8TRX optically centred
+ * on the screen rather than in the space left of the close button.
+ */
 .checkout__top {
   flex: none;
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: var(--touch-target) minmax(0, 1fr) var(--touch-target);
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-2) 0;
+}
+
+/*
+ * M8TRX header. --font-segment is the hook for the official DIM8
+ * seven-segment font (not yet supplied; falls back to the DIM8 wordmark
+ * stack). text-indent equals the letter-spacing so the trailing tracking
+ * after the final letter does not shift the word off centre.
+ */
+.checkout__brand {
+  min-width: 0;
+  text-align: center;
+  font-family: var(--font-segment);
+  font-size: clamp(1.75rem, 9vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  white-space: nowrap;
+  color: var(--color-brand);
+  text-shadow: 0 0 0.9rem var(--color-glow);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .checkout__close {
@@ -787,21 +825,21 @@ html.checkout-open body {
   place-items: center;
   width: var(--touch-target);
   height: var(--touch-target);
-  border: 1px solid rgb(255 255 255 / 0.14);
+  border: 1px solid rgb(var(--color-brand-rgb) / 0.22);
   border-radius: var(--radius-pill);
-  background: rgb(255 255 255 / 0.06);
+  background: rgb(var(--color-brand-rgb) / 0.06);
   color: var(--color-text);
   cursor: pointer;
 }
 
 .checkout__close:hover {
-  background: rgb(255 255 255 / 0.12);
+  background: rgb(var(--color-brand-rgb) / 0.12);
 }
 
 /*
- * The swipe surface fills the space between the top bar and the information
- * region and centres the card. It is a size container so the card can be
- * sized against the space actually available (cqw / cqh), which keeps the
+ * The swipe surface fills the space between the top bar and the pagination
+ * and centres the name + card group. It is a size container so the card can
+ * be sized against the space actually available (cqw / cqh), which keeps the
  * card fully visible on short landscape screens.
  */
 .checkout__stage {
@@ -819,10 +857,15 @@ html.checkout-open body {
   overflow: hidden;
 }
 
-/* Carries the drag offset (inline transform) for the face inside it. */
+/*
+ * The store name and the card face, stacked. Carries the drag offset (inline
+ * transform), so the caption moves with its card.
+ */
 .checkout__card {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
   width: 100%;
 }
 
@@ -831,42 +874,103 @@ html.checkout-open body {
 }
 
 /*
- * The visible card. 22rem caps it well short of edge to edge on large
+ * Store name: the app font in the DIM8 brand colour (14.3:1 on the
+ * background) with a faint VFD glow. Long names wrap to at most two lines
+ * (anywhere, so one very long word cannot overflow) and are then clamped
+ * visually; the element's text, and so the dialog's accessible name, is
+ * always the complete name.
+ */
+.checkout__store {
+  max-width: min(100%, 22rem);
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: clamp(1.0625rem, 4.6vw, 1.3125rem);
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  color: var(--color-brand);
+  text-shadow: 0 0 0.75rem rgb(var(--color-glow-rgb) / 0.3);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/*
+ * The visible card. --face-max caps it well short of edge to edge on large
  * phones and desktops; the cqh term keeps the ratio's height within the
- * stage. The fallback width (no container units) only limits by width.
+ * stage after the title reserve. The fallback width (no container units)
+ * only limits by width.
  */
 .checkout__face {
-  /* Credit-card ratio (85.6 × 54 mm); 2D codes override it below. */
+  /* Default ("card"): credit-card ratio (85.6 × 54 mm). */
   --face-ratio: 1.586;
+  --face-max: 22rem;
   display: flex;
   flex-direction: column;
-  width: min(100%, 22rem);
+  width: min(100%, var(--face-max));
   aspect-ratio: var(--face-ratio);
   border-radius: var(--radius-lg);
   /* Clips the accent bands to the rounded corners. */
   overflow: hidden;
+  /* White card surface for barcode readability; never themed. */
   background: #ffffff;
   color: #5f6368;
   color-scheme: light;
   box-shadow:
-    0 0 0 1px rgb(255 255 255 / 0.1),
+    0 0 0 1px rgb(var(--color-brand-rgb) / 0.1),
     0 1.25rem 2.5rem rgb(0 0 0 / 0.55),
-    0 0 3rem rgb(var(--color-brand-rgb) / 0.1);
+    0 0 3rem rgb(var(--color-glow-rgb) / 0.12);
 }
 
 @supports (width: 1cqh) {
   .checkout__face {
-    width: min(100cqw, 22rem, 100cqh * var(--face-ratio));
+    width: min(100cqw, var(--face-max), (100cqh - var(--checkout-title-reserve)) * var(--face-ratio));
   }
+}
+
+/*
+ * Square symbols (QR, Data Matrix, Aztec; redrawn or saved artwork). In the
+ * credit-card face a QR code was height-limited to roughly 150–195 px on
+ * common phones. A near-square face lets the symbol use almost the full card
+ * width: 0.93 makes the code area (face minus the 1.25rem of bands and
+ * 0.75rem padding) close to square between 15rem and 20rem wide, i.e. about
+ * 230 px on a 320 px phone and 290 px on a 375 px phone (~+50%). 20rem caps
+ * it on large screens; the cqh term shrinks it on short ones. The image keeps
+ * object-fit: contain, so non-square artwork is letterboxed on white, never
+ * stretched or cropped.
+ */
+.checkout__face[data-presentation='square'] {
+  --face-ratio: 0.93;
+  --face-max: 20rem;
+}
+
+.checkout__face[data-presentation='square'] .checkout__code {
+  padding: var(--space-3);
+}
+
+/*
+ * PDF417: two-dimensional but wide. Keeps the v0.4.1 "2D" face (a little
+ * taller than a credit card, tighter padding); never the square QR face.
+ */
+.checkout__face[data-presentation='stacked'] {
+  --face-ratio: 1.35;
+}
+
+.checkout__face[data-presentation='stacked'] .checkout__code {
+  padding: var(--space-2) var(--space-3);
 }
 
 /*
  * Text-only cards (no barcode, or a code that could not be drawn) show a
  * number and a note that can wrap on narrow screens, which a fixed ratio
  * would clip or overflow. These faces are sized by their content instead,
- * with a floor and generous padding so they still read as a card. Image codes
- * keep the ratio (and min-height: 0 on the code area) so their intrinsic
- * size never enlarges the card.
+ * with a floor and generous padding so they still read as a card. Declared
+ * after the presentation rules (same specificity) so a QR code that fails to
+ * draw is still shown as text. Image codes keep the ratio (and min-height: 0
+ * on the code area) so their intrinsic size never enlarges the card.
  */
 .checkout__face:has(.barcode--text) {
   aspect-ratio: auto;
@@ -876,23 +980,6 @@ html.checkout-open body {
 .checkout__face:has(.barcode--text) .checkout__code {
   min-height: auto;
   padding-block: var(--space-5);
-}
-
-/*
- * Square 2D codes (QR, Data Matrix, Aztec) would be height-limited to under
- * 100px on a 320px phone in a credit-card-shaped card, which risks scanner
- * reliability. (PDF417, also 2D in formats.ts, is wide and simply stays
- * width-limited.) Their card is a little taller and
- * its code padding tighter, so the symbol gets roughly 30% more height while
- * the card still reads as a card. Swiping between 1D and 2D cards therefore
- * changes the card's height slightly.
- */
-.checkout__face:has(.barcode--2d) {
-  --face-ratio: 1.35;
-}
-
-.checkout__face:has(.barcode--2d) .checkout__code {
-  padding: var(--space-2) var(--space-3);
 }
 
 .checkout__band {
@@ -922,9 +1009,8 @@ html.checkout-open body {
  * Codes scale down with the card instead of using the full-screen limits in
  * "Barcode display" below (which still apply to the add-card previews). The
  * image box fills the code area and object-fit: contain keeps the symbol
- * undistorted, so a linear code ends up width-limited (full card width minus
- * padding) and a square 2D code height-limited (centred, about the card's
- * inner height).
+ * undistorted and centred, so a linear code ends up width-limited and a
+ * square code fills the near-square code area.
  */
 .checkout__code .barcode__image {
   width: 100%;
@@ -951,27 +1037,7 @@ html.checkout-open body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
   padding: 0 var(--space-4) var(--space-3);
-}
-
-/*
- * Store name: the app font in the brand colour (contrast 9.0:1 on the dark
- * background), with a faint glow echoing a VFD readout. Long names truncate
- * to one line so the pagination never moves.
- */
-.checkout__store {
-  max-width: 100%;
-  text-align: center;
-  font-size: clamp(1.125rem, 4.8vw, 1.375rem);
-  font-weight: 650;
-  line-height: 1.3;
-  letter-spacing: 0.01em;
-  color: var(--color-brand);
-  text-shadow: 0 0 0.75rem rgb(var(--color-brand-rgb) / 0.35);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .checkout__nav {
@@ -989,12 +1055,13 @@ html.checkout-open body {
   border: 0;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--color-text);
+  color: var(--color-brand);
   cursor: pointer;
 }
 
 .checkout__step:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(var(--color-brand-rgb) / 0.1);
+  color: var(--color-brand-bright);
 }
 
 .checkout__step:disabled {
@@ -1014,11 +1081,56 @@ html.checkout-open body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: rgb(255 255 255 / 0.28);
+  background: rgb(var(--color-brand-rgb) / 0.28);
 }
 
 .checkout__dot--active {
-  background: var(--color-brand);
+  background: var(--color-brand-bright);
+  box-shadow: 0 0 6px var(--color-glow);
+}
+
+/*
+ * Short screens (iPhone SE / mini portrait, phones in landscape): shrink the
+ * header and stage padding first so the card keeps as much height as
+ * possible. Below 460px tall (landscape) the name is limited to one line and
+ * its reserve reduced to match.
+ */
+@media (max-height: 640px) {
+  .checkout__top {
+    padding-top: var(--space-1);
+  }
+
+  .checkout__brand {
+    font-size: clamp(1.5rem, 7.5vw, 1.875rem);
+  }
+
+  .checkout__stage {
+    padding-block: var(--space-3);
+  }
+}
+
+@media (max-height: 460px) {
+  .checkout {
+    --checkout-title-reserve: 1.9rem;
+  }
+
+  .checkout__brand {
+    font-size: 1.25rem;
+  }
+
+  .checkout__stage {
+    padding-block: var(--space-2);
+  }
+
+  .checkout__card {
+    gap: var(--space-1);
+  }
+
+  .checkout__store {
+    font-size: 1.0625rem;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
 }
 
 /* ---- Barcode display -------------------------------------------------------

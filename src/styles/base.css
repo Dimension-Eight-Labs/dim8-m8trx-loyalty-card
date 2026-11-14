@@ -15,7 +15,8 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   background: var(--color-bg);
-  color: var(--color-text);
+  /* DIM8 body text; headings below use the brighter primary text colour. */
+  color: var(--color-text-body);
   font-family: var(--font-sans);
   font-size: var(--font-size-md);
   line-height: 1.5;
@@ -29,6 +30,11 @@ h2,
 p,
 ul {
   margin: 0;
+}
+
+h1,
+h2 {
+  color: var(--color-text);
 }
 
 ul {

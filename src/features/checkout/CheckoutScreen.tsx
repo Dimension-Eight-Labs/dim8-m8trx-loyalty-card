@@ -1,19 +1,25 @@
 /**
  * Checkout mode: one card, presented as a floating tile on a dark stage.
  *
- * Layout (v0.4.1 redesign), top to bottom:
- * - A small top bar holding only the × (close) button.
+ * Layout (v0.4.2), top to bottom:
+ * - Top bar: the M8TRX header centred, balanced by an empty spacer the same
+ *   width as the × (close) button on the right. The header is decorative
+ *   branding (aria-hidden); the dialog is still labelled by the card name.
  * - The stage: the subtle M8TRX backdrop (shared with the wallet, see
- *   app.css) with the card centred on it. The card is a white, card-shaped tile
- *   (credit-card ratio; slightly taller for square 2D codes) with thin bands in the card's accent colour and
- *   the barcode scaled to fit inside it (never stretched: object-fit:
- *   contain, quiet zone inside the image). The card no longer fills the
- *   screen edge to edge.
- * - An information region near the bottom: the store name (the dialog's
- *   label) in the app font and brand colour, directly above the pagination
- *   arrows and dots.
+ *   app.css) with the card group centred on it. The group is the store name
+ *   (the dialog's label, in the app font and DIM8 brand colour) immediately
+ *   above the card. The card is a white tile whose shape follows the barcode
+ *   (see barcodes/presentation.ts): a compact credit-card face for linear
+ *   codes and unknown images, a near-square face for QR / Data Matrix /
+ *   Aztec (redrawn or saved artwork), and the slightly taller v0.4.1 face for
+ *   PDF417. Thin bands in the card's accent colour; the barcode is scaled to
+ *   fit (never stretched: object-fit: contain, quiet zone inside the image).
+ * - Bottom: the pagination arrows and dots (unchanged position).
  *
- * Why the redesign: the previous design filled the whole screen (and the
+ * v0.4.2 moved the store name from above the pagination to directly above
+ * the card, so the name reads as the card's caption.
+ *
+ * Why the dark stage (v0.4.1): the earlier design filled the whole screen (and the
  * iPhone safe areas, via colours published on <html>) with the active card's
  * accent. iOS does not reliably repaint the notch / home-indicator areas on
  * card switches, so the outer surface is now always the dark app background
@@ -49,6 +55,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { BackIcon, ChevronIcon, CloseIcon } from '../../components/icons.tsx'
 import { BarcodeView } from '../barcodes/BarcodeView.tsx'
+import { checkoutPresentation } from '../barcodes/presentation.ts'
 import type { LoyaltyCard } from '../cards/card.ts'
 import { tileColor } from '../cards/tileColors.ts'
 import { gestureAction, GESTURE_DEAD_ZONE_PX, type Axis } from './gesture.ts'
@@ -155,7 +162,12 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
 
   return (
     <div className="checkout" role="dialog" aria-modal="true" aria-labelledby="checkout-store">
+      {/* Three columns: spacer | M8TRX | ×, so the title is optically centred. */}
       <div className="checkout__top" data-testid="checkout-header">
+        <span className="checkout__top-spacer" aria-hidden="true" />
+        <p className="checkout__brand" data-testid="checkout-brand" aria-hidden="true">
+          M8TRX
+        </p>
         <button ref={closeRef} type="button" className="checkout__close" aria-label="Close card" onClick={onClose}>
           <CloseIcon />
         </button>
@@ -169,13 +181,21 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
         onPointerUp={(event) => endDrag(event, false)}
         onPointerCancel={(event) => endDrag(event, true)}
       >
-        {/* Outer element carries the drag offset; the face inside is the visible card. */}
+        {/* The name and the card move together while dragging, so the caption stays attached. */}
         <div
           key={card.id}
           className={settled ? 'checkout__card checkout__card--settled' : 'checkout__card'}
           style={settled ? undefined : { transform: `translate(${offset.x}px, ${offset.y}px)` }}
         >
-          <div className="checkout__face" data-testid="checkout-card" style={accent}>
+          <h1 id="checkout-store" className="checkout__store">
+            {card.storeName}
+          </h1>
+          <div
+            className="checkout__face"
+            data-testid="checkout-card"
+            data-presentation={checkoutPresentation(card.barcode)}
+            style={accent}
+          >
             <span className="checkout__band" aria-hidden="true" />
             <div className="checkout__code">
               <BarcodeView barcode={card.barcode} label={`${card.storeName} barcode`} />
@@ -185,11 +205,8 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
         </div>
       </div>
 
-      {/* Bottom information region: store name directly above the pagination. */}
+      {/* Bottom region: pagination only (the name now sits above the card). */}
       <div className="checkout__info" data-testid="checkout-info">
-        <h1 id="checkout-store" className="checkout__store">
-          {card.storeName}
-        </h1>
         {cards.length > 1 && (
           <div className="checkout__nav">
             <button

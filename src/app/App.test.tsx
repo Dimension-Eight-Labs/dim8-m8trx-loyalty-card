@@ -582,46 +582,65 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'First' })).toHaveFocus()
   })
 
-  it('shows the checkout as a centred card on a dark stage, with the name above the pagination', async () => {
+  it('shows M8TRX at the top, the name immediately above the card, and pagination below the stage', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Corner Coffee', '0012', 'Code 128', 'Green')
     await addManualCard(user, 'Second', '2')
     await user.click(screen.getByRole('button', { name: 'Corner Coffee' }))
 
     const checkout = screen.getByRole('dialog', { name: 'Corner Coffee' })
-    // The top bar only holds the ×; the store name is no longer in a header band.
+    // Top bar: decorative M8TRX title (hidden from assistive tech) and the ×.
     const header = screen.getByTestId('checkout-header')
+    const brand = within(header).getByTestId('checkout-brand')
+    expect(brand).toHaveTextContent('M8TRX')
+    expect(brand).toHaveAttribute('aria-hidden', 'true')
     expect(within(header).getByRole('button', { name: 'Close card' })).toBeInTheDocument()
     expect(within(header).queryByRole('heading')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('checkout-footer')).not.toBeInTheDocument()
 
-    // The barcode sits inside the card face, which sits on the swipe stage.
-    const face = screen.getByTestId('checkout-card')
-    expect(within(screen.getByTestId('checkout-stage')).getByTestId('checkout-card')).toBe(face)
+    // The name is the card's caption: in the stage, the face's immediate predecessor.
+    const stage = screen.getByTestId('checkout-stage')
+    const face = within(stage).getByTestId('checkout-card')
+    const heading = within(stage).getByRole('heading', { level: 1, name: 'Corner Coffee' })
+    expect(heading.nextElementSibling).toBe(face)
     expect(within(face).getByRole('img', { name: /code 128/i })).toBeInTheDocument()
+    // A linear code keeps the compact credit-card face.
+    expect(face).toHaveAttribute('data-presentation', 'card')
 
-    // Name in the bottom information region, immediately before the pagination.
+    // Pagination is alone in the bottom region, after the stage.
     const info = screen.getByTestId('checkout-info')
-    const heading = within(info).getByRole('heading', { level: 1, name: 'Corner Coffee' })
     expect(within(info).getByRole('button', { name: 'Next card' })).toBeInTheDocument()
-    const nav = screen.getByRole('button', { name: 'Previous card' }).parentElement!
-    expect(heading.nextElementSibling).toBe(nav)
-    // Reading order: card first, then name and pagination.
-    expect(face.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(info).queryByRole('heading')).not.toBeInTheDocument()
+    expect(stage.nextElementSibling).toBe(info)
+
+    // Document order: M8TRX, then the name, then the card, then pagination.
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(follows(brand, heading)).toBe(true)
+    expect(follows(heading, face)).toBe(true)
+    expect(follows(face, info)).toBe(true)
 
     // The accent is local to the card face, not the whole screen.
     expect(face.style.getPropertyValue('--card-accent')).toBe('#2e7d32')
     expect(checkout.style.getPropertyValue('--card-accent')).toBe('')
   })
 
-  it('shows the store name at the bottom even without pagination (single card)', async () => {
+  it('shows the store name above the card even without pagination (single card)', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Only', '1')
     await user.click(screen.getByRole('button', { name: 'Only' }))
 
-    const info = screen.getByTestId('checkout-info')
-    expect(within(info).getByRole('heading', { level: 1, name: 'Only' })).toBeInTheDocument()
+    const heading = within(screen.getByTestId('checkout-stage')).getByRole('heading', { level: 1, name: 'Only' })
+    expect(heading.nextElementSibling).toBe(screen.getByTestId('checkout-card'))
     expect(screen.queryByRole('button', { name: 'Next card' })).not.toBeInTheDocument()
+  })
+
+  it('gives a redrawn QR code the square checkout face', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'Gym Pass', 'MEMBER-42', 'QR code')
+    await user.click(screen.getByRole('button', { name: 'Gym Pass' }))
+
+    const face = screen.getByTestId('checkout-card')
+    expect(face).toHaveAttribute('data-presentation', 'square')
+    expect(within(face).getByRole('img', { name: /gym pass barcode \(qr code\)/i })).toBeInTheDocument()
   })
 
   it('keeps the active card accent on the card face across swipes and never writes accent colours to <html>', async () => {
