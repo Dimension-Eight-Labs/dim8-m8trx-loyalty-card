@@ -582,87 +582,86 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'First' })).toHaveFocus()
   })
 
-  it('shows the checkout as a card: accent header with the store name and ×, matching bottom strip', async () => {
+  it('shows the checkout as a centred card on a dark stage, with the name above the pagination', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Corner Coffee', '0012', 'Code 128', 'Green')
+    await addManualCard(user, 'Second', '2')
     await user.click(screen.getByRole('button', { name: 'Corner Coffee' }))
 
     const checkout = screen.getByRole('dialog', { name: 'Corner Coffee' })
-    expect(checkout.style.getPropertyValue('--card-accent')).toBe('#2e7d32')
-    expect(checkout.style.getPropertyValue('--card-on-accent')).toBe('#ffffff')
+    // The top bar only holds the ×; the store name is no longer in a header band.
     const header = screen.getByTestId('checkout-header')
-    expect(within(header).getByRole('heading', { level: 1, name: 'Corner Coffee' })).toBeInTheDocument()
     expect(within(header).getByRole('button', { name: 'Close card' })).toBeInTheDocument()
-    expect(screen.getByTestId('checkout-footer')).toHaveAttribute('aria-hidden', 'true')
-    // The barcode stays on the stage, between the bands.
-    expect(within(screen.getByTestId('checkout-stage')).getByRole('img', { name: /code 128/i })).toBeInTheDocument()
+    expect(within(header).queryByRole('heading')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('checkout-footer')).not.toBeInTheDocument()
+
+    // The barcode sits inside the card face, which sits on the swipe stage.
+    const face = screen.getByTestId('checkout-card')
+    expect(within(screen.getByTestId('checkout-stage')).getByTestId('checkout-card')).toBe(face)
+    expect(within(face).getByRole('img', { name: /code 128/i })).toBeInTheDocument()
+
+    // Name in the bottom information region, immediately before the pagination.
+    const info = screen.getByTestId('checkout-info')
+    const heading = within(info).getByRole('heading', { level: 1, name: 'Corner Coffee' })
+    expect(within(info).getByRole('button', { name: 'Next card' })).toBeInTheDocument()
+    const nav = screen.getByRole('button', { name: 'Previous card' }).parentElement!
+    expect(heading.nextElementSibling).toBe(nav)
+    // Reading order: card first, then name and pagination.
+    expect(face.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    // The accent is local to the card face, not the whole screen.
+    expect(face.style.getPropertyValue('--card-accent')).toBe('#2e7d32')
+    expect(checkout.style.getPropertyValue('--card-accent')).toBe('')
   })
 
-  it('uses the dark text colour on light accent colours', async () => {
+  it('shows the store name at the bottom even without pagination (single card)', async () => {
     const { user } = renderApp()
-    await addManualCard(user, 'Sunny', '1', 'Code 128', 'Yellow')
-    await user.click(screen.getByRole('button', { name: 'Sunny' }))
+    await addManualCard(user, 'Only', '1')
+    await user.click(screen.getByRole('button', { name: 'Only' }))
 
-    const checkout = screen.getByRole('dialog', { name: 'Sunny' })
-    expect(checkout.style.getPropertyValue('--card-accent')).toBe('#fbc02d')
-    expect(checkout.style.getPropertyValue('--card-on-accent')).toBe('#1a1a1a')
+    const info = screen.getByTestId('checkout-info')
+    expect(within(info).getByRole('heading', { level: 1, name: 'Only' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next card' })).not.toBeInTheDocument()
   })
 
-  it('keeps the root safe-area colour in sync with the active card across repeated swipes, and clears it on close', async () => {
+  it('keeps the active card accent on the card face across swipes and never writes accent colours to <html>', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Slate Shop', '1', 'Code 128', 'Slate')
     await addManualCard(user, 'Red Shop', '2', 'Code 128', 'Red')
     const root = document.documentElement
-    const rootAccent = () => [root.style.getPropertyValue('--checkout-accent'), root.style.getPropertyValue('--checkout-on-accent')]
     const swipe = (id: number, dx: number) => {
       const stage = screen.getByTestId('checkout-stage')
       fireEvent.pointerDown(stage, { pointerId: id, isPrimary: true, clientX: 200, clientY: 200 })
       fireEvent.pointerMove(stage, { pointerId: id, clientX: 200 + dx, clientY: 202 })
       fireEvent.pointerUp(stage, { pointerId: id, clientX: 200 + dx, clientY: 202 })
     }
-    const expectActive = (name: string, accent: string, text: string) => {
-      const checkout = screen.getByRole('dialog', { name })
-      expect(rootAccent()).toEqual([accent, text])
-      // Header and bottom strip read the same value (see app.css).
-      expect(checkout.style.getPropertyValue('--card-accent')).toBe(accent)
+    const expectActive = (name: string, accent: string) => {
+      expect(screen.getByRole('dialog', { name })).toBeInTheDocument()
+      expect(screen.getByTestId('checkout-card').style.getPropertyValue('--card-accent')).toBe(accent)
+      // The outer surface no longer depends on the active card (v0.4.1).
+      expect(root.getAttribute('style') ?? '').not.toMatch(/accent/)
     }
-    expect(rootAccent()).toEqual(['', ''])
 
     await user.click(screen.getByRole('button', { name: 'Slate Shop' }))
     expect(root).toHaveClass('checkout-open')
-    expectActive('Slate Shop', '#455a64', '#ffffff')
+    expectActive('Slate Shop', '#455a64')
     const close = screen.getByRole('button', { name: 'Close card' })
     expect(close).toHaveFocus()
 
-    // Repeated switches: every change lands immediately, never stuck on the first card's colour.
     for (let round = 0; round < 3; round++) {
       swipe(round * 2 + 1, -150)
-      expectActive('Red Shop', '#c62828', '#ffffff')
+      expectActive('Red Shop', '#c62828')
       swipe(round * 2 + 2, 150)
-      expectActive('Slate Shop', '#455a64', '#ffffff')
+      expectActive('Slate Shop', '#455a64')
     }
     await user.keyboard('{ArrowRight}')
-    expectActive('Red Shop', '#c62828', '#ffffff')
+    expectActive('Red Shop', '#c62828')
     // Switching cards does not steal focus back to the × (it stays where it was).
     expect(close).toHaveFocus()
 
     await user.click(screen.getByRole('button', { name: 'Close card' }))
     expect(root).not.toHaveClass('checkout-open')
-    expect(rootAccent()).toEqual(['', ''])
     expect(screen.getByRole('button', { name: 'Red Shop' })).toHaveFocus()
-  })
-
-  it('publishes the dark text colour on the root for light accents', async () => {
-    const { user } = renderApp()
-    await addManualCard(user, 'Sunny', '1', 'Code 128', 'Yellow')
-    await addManualCard(user, 'Plain', '2', 'Code 128', 'White')
-    await user.click(screen.getByRole('button', { name: 'Sunny' }))
-    expect(document.documentElement.style.getPropertyValue('--checkout-on-accent')).toBe('#1a1a1a')
-    await user.keyboard('{ArrowRight}')
-    expect(document.documentElement.style.getPropertyValue('--checkout-accent')).toBe('#eceff1')
-    expect(document.documentElement.style.getPropertyValue('--checkout-on-accent')).toBe('#1a1a1a')
-    await user.keyboard('{Escape}')
-    expect(document.documentElement.style.getPropertyValue('--checkout-accent')).toBe('')
   })
 
   it('closes checkout with a deliberate downward swipe and returns focus to the tile', async () => {

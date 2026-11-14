@@ -7,7 +7,7 @@ The product does one job on purpose. It has **no accounts, advertisements,
 analytics, cloud backend, or synchronization**, and it loads nothing from
 third-party hosts.
 
-## Current status (v0.4.0 card wallet, development)
+## Current status (v0.4.1 card wallet, development)
 
 Capture a physical loyalty card once, then show a clean, freshly drawn barcode
 at checkout.
@@ -21,10 +21,11 @@ at checkout.
   opens **Rename**, **Change colour**, **Move earlier / later / to first /
   to last** (the keyboard-accessible way to reorder), and **Delete** (with
   confirmation). A small **+** in the top corner adds a card.
-- **Checkout mode**: a full-screen digital card — a narrow header band in the
-  card's colour with the store name in large type and a small **×**, a white
-  stage with the barcode as large as the screen allows, and a matching narrow
-  strip at the bottom. Close with the **×**, Escape, or a deliberate swipe
+- **Checkout mode**: the card floats as a centred, card-shaped white tile
+  (thin bands in the card's colour, barcode scaled to fit) on a dark stage
+  with the subtle M8TRX circuit backdrop. The store name sits near the
+  bottom in the brand colour, directly above the pagination chevrons; a
+  small **×** is in the top corner. Close with the **×**, Escape, or a deliberate swipe
   down. Swipe left/right (or use ←/→ or the small chevrons) to move between
   cards; navigation stops at the first/last card. Page scrolling is locked, and the
   screen is kept awake where the browser supports it.
@@ -45,6 +46,43 @@ at checkout.
   migrated automatically and are never deleted.
 - Dark interface, keyboard accessible; no accounts, backend, analytics, or
   third-party requests.
+
+### v0.4.1 — Checkout stage redesign
+
+Development version; not published or deployed.
+
+Instead of continuing to match the iPhone safe-area colour to the active
+card, checkout no longer fills the screen with the accent colour at all:
+
+- The outer surface is always the dark app background plus a shared, subtle
+  M8TRX backdrop (faint circuit traces, matrix grid and glow, drawn in CSS
+  from a local inline SVG; no remote assets). The wallet uses the same
+  backdrop. `<html>`/`<body>` stay dark while checkout is open, and the
+  v0.4.0 `--checkout-accent` / `--checkout-on-accent` root properties have
+  been removed.
+- The card is a centred white tile — credit-card ratio for linear codes,
+  slightly taller for square 2D codes so QR / Data Matrix / Aztec stay
+  large enough to scan — capped at 22 rem wide and sized to the space left
+  in short landscape views. Its accent colour appears only in its thin top
+  and bottom bands. Codes are scaled to fit inside the card (never
+  stretched; the quiet zone is part of the image). Text-only cards size the
+  card to their content.
+- The store name moved from the header band to the dark background near the
+  bottom, in the app font and the brand colour (`--color-brand`, which
+  currently equals the existing accent `#8ab4f8`: no authoritative DIM8 VFD
+  colour is defined in this repository), directly above the chevrons and
+  dots. Long names truncate to one line.
+- Close (×, Escape, swipe down), swipe/arrow/chevron navigation, wake lock
+  and focus behaviour are unchanged.
+- Wallet tiles keep their size and layout; the miniature card preview is now
+  centred horizontally and vertically in the tile. When a long store name
+  wraps to two lines, the preview moves up only as far as needed so the two
+  never overlap.
+
+Checked in headless desktop Firefox at 320×568, 375×667, 390×844 and
+844×390 (linear, QR, PDF417, EAN-13, text-only, single- and multi-card,
+long names). **Not yet checked on an iPhone or with a checkout scanner**
+(see the v0.4.1 checklist below).
 
 ### v0.4.0 — Card order and checkout safe-area colour (Iteration 4C)
 
@@ -423,11 +461,12 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
   failures, no cropping of views, and weak-read handling. Only the browser
   canvas step is replaced.
 - **Wallet/checkout UI**: tile preview variants (no value encoded, artwork
-  object URLs revoked), palette contrast ≥ 4.5:1, checkout bands and colours,
+  object URLs revoked), palette contrast ≥ 4.5:1, checkout card structure
+  (name above pagination, barcode inside the card, accent local to the card),
   swipe-down close, and taps/short/diagonal/upward/cancelled gestures not
   closing.
 - **App flows**: wallet, drag/keyboard reordering, menu, rename/recolour/delete, checkout
-  close/swipe/keys/wake lock, checkout accent on the document root across
+  close/swipe/keys/wake lock, no accent colours on the document root across
   repeated swipes, all three capture paths, crop-retry and image
   fallback, failure messages, scanner stall guidance, Scan again, late and
   duplicate camera callbacks. Camera and canvas decoding are faked here.
@@ -464,11 +503,28 @@ results.
 9. **Import** the original UDF and Kroger screenshots; then test a rotated
    copy and the crop-and-retry path.
 
+**v0.4.1 checks on iPhone (not yet performed).**
+
+1. **Dark stage.** Open cards in dark (Slate), bright (Red) and light
+   (Yellow, White) colours and swipe between them: the notch / Dynamic
+   Island and home-indicator areas stay dark throughout; only the card's own
+   bands change colour. Repeat in Brave, Safari and the installed PWA.
+2. **Layout.** On the narrowest iPhone and a large one, in portrait and
+   landscape: the card is centred with visible dark space around it, the
+   store name sits directly above the chevrons (a long name truncates), and
+   the × and chevrons are easy to hit. The backdrop stays subtle.
+3. **Scanning.** Scan a displayed linear code (Code 128 and EAN/UPC) and a
+   QR code with real checkout hardware at the new, smaller size, at normal
+   and reduced screen brightness.
+4. **Wallet tiles.** The miniature card preview is centred in each tile; a
+   two-line name never overlaps it.
+
 **v0.4.0 checks on iPhone (not yet performed).** jsdom host tests cannot
 show WebKit safe-area painting, real touch arbitration, scrolling during a
 long-press, or the grid animation.
 
-1. **Safe-area colour.** Create cards in a dark colour (Slate) and a
+1. **Safe-area colour** (superseded by the v0.4.1 dark stage; the card
+   colour no longer reaches the safe areas). Create cards in a dark colour (Slate) and a
    contrasting one (Red), plus a light one (Yellow or White). Open Slate:
    the notch / Dynamic Island area, header and bottom strip (including the
    home-indicator area) are all Slate. Swipe to Red: all three change

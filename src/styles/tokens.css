@@ -11,6 +11,7 @@
  *   text          on bg 16.4, surface 15.0, raised 13.4, hover 12.2
  *   text-muted    on bg 8.1,  surface 7.4,  raised 6.6,  hover 6.0
  *   accent        on bg 9.0,  surface 8.3 (focus ring, active row marker)
+ *   brand         = accent (branded checkout title)
  *   on-accent     on accent 8.9, accent-hover 10.9 (primary button label)
  *   danger        on bg 8.4,  surface 7.6,  raised 6.8,  danger-surface 7.5
  *   on-danger     on danger 8.4, danger-hover 10.3 (destructive confirm label)
@@ -33,6 +34,17 @@
   --color-accent-hover: #a8c7fa;
   --color-on-accent: #0b1220;
   --color-focus: #8ab4f8;
+  /*
+   * Brand (DIM8 / VFD-style) colour for branded text and the M8TRX backdrop
+   * traces. No authoritative DIM8 VFD colour is defined in this repository,
+   * so it deliberately reuses the existing accent (9.0:1 on --color-bg);
+   * replace both values together if a brand colour is supplied. The RGB
+   * triplet exists for translucent uses (rgb(var(--color-brand-rgb) / a)).
+   * The backdrop SVG in app.css cannot read custom properties and repeats
+   * this triplet literally.
+   */
+  --color-brand: #8ab4f8;
+  --color-brand-rgb: 138 180 248;
   --color-danger: #ff8a80;
   --color-danger-hover: #ffa79f;
   --color-on-danger: #1a0b0a;

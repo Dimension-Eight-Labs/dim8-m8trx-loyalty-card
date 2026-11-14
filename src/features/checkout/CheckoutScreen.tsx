@@ -1,34 +1,37 @@
 /**
- * Checkout mode: one card, full screen, barcode as large as practical.
+ * Checkout mode: one card, presented as a floating tile on a dark stage.
  *
- * - Presented as a clean digital card: a narrow header band in the card's
- *   accent colour carrying the store name (large, bold) and a small × in the
- *   upper-right, a matching narrow band at the bottom, and a white stage
- *   between them. Band colours and text colours come from the tile palette
- *   (tileColors.ts), whose pairs all meet WCAG 4.5:1.
- * - The stage stays white for maximum contrast (and the most light from the
- *   screen); the barcode image carries its own quiet zone on top of that, and
- *   is never stretched (object-fit: contain, centred).
+ * Layout (v0.4.1 redesign), top to bottom:
+ * - A small top bar holding only the × (close) button.
+ * - The stage: the subtle M8TRX backdrop (shared with the wallet, see
+ *   app.css) with the card centred on it. The card is a white, card-shaped tile
+ *   (credit-card ratio; slightly taller for square 2D codes) with thin bands in the card's accent colour and
+ *   the barcode scaled to fit inside it (never stretched: object-fit:
+ *   contain, quiet zone inside the image). The card no longer fills the
+ *   screen edge to edge.
+ * - An information region near the bottom: the store name (the dialog's
+ *   label) in the app font and brand colour, directly above the pagination
+ *   arrows and dots.
+ *
+ * Why the redesign: the previous design filled the whole screen (and the
+ * iPhone safe areas, via colours published on <html>) with the active card's
+ * accent. iOS does not reliably repaint the notch / home-indicator areas on
+ * card switches, so the outer surface is now always the dark app background
+ * and the accent colour is confined to the card itself (--card-accent set
+ * inline on the card face only). Nothing is written to
+ * the document root besides the scroll-lock class.
+ *
  * - Closing: the ×, Escape, or a deliberate downward swipe on the stage.
- * - Swipe horizontally, use ←/→, or the small chevrons to move between cards.
+ * - Swipe horizontally, use ←/→, or the chevrons to move between cards.
  *   Navigation stops at the first/last card rather than wrapping, so a swipe
  *   never lands on an unexpected card.
  * - Page scrolling, rubber-banding, and pinch-zoom are suppressed while open
  *   (body class + `touch-action: none`); restored on close.
- * - Safe-area colour (v0.4.0 fix): while open, the active card's accent and
- *   text colours are also published on <html> as --checkout-accent /
- *   --checkout-on-accent, and the document canvas (html/body) is painted
- *   with them. On iPhone the area around the notch / Dynamic Island and the
- *   home indicator can be painted from the document canvas rather than from
- *   the fixed checkout bands, so painting only the bands left that area in
- *   the colour of the wallet or of the first card shown. The root properties
- *   are rewritten before paint whenever the active card changes and removed
- *   on close, so header, notch area and bottom strip always share one value.
  * - Requests a screen wake lock where supported (useWakeLock).
  * - Card changes are announced through a polite live region.
  *
- * Gesture rules (pointer events on the stage only, so header and navigation
- * controls stay ordinary buttons):
+ * Gesture rules (pointer events on the stage only, so the close and
+ * navigation controls stay ordinary buttons):
  * - Dead zone: until the pointer has moved GESTURE_DEAD_ZONE_PX, nothing
  *   moves and no direction is chosen, so taps and finger jitter do nothing.
  * - Axis lock: once past the dead zone the gesture is classified once, as
@@ -43,17 +46,13 @@
  *   close. Anything shorter snaps back.
  * - pointercancel (the browser or OS took the gesture) never acts.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { BackIcon, ChevronIcon, CloseIcon } from '../../components/icons.tsx'
 import { BarcodeView } from '../barcodes/BarcodeView.tsx'
 import type { LoyaltyCard } from '../cards/card.ts'
 import { tileColor } from '../cards/tileColors.ts'
 import { gestureAction, GESTURE_DEAD_ZONE_PX, type Axis } from './gesture.ts'
 import { useWakeLock } from './useWakeLock.ts'
-
-/** Root (<html>) custom properties owned by checkout while it is open; read by app.css. */
-export const ROOT_ACCENT = '--checkout-accent'
-export const ROOT_ON_ACCENT = '--checkout-on-accent'
 
 export interface CheckoutScreenProps {
   cards: LoyaltyCard[]
@@ -87,32 +86,6 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
     closeRef.current?.focus({ preventScroll: true })
     return () => document.documentElement.classList.remove('checkout-open')
   }, [])
-
-  // Publish the ACTIVE card's colours on <html> (see the header comment).
-  // Layout effect so the root updates in the same frame as the header: a
-  // passive effect could paint one frame with the previous card's colour.
-  // Keyed on the colour values, so it re-runs on every card switch rather
-  // than capturing the colour of the card checkout opened with.
-  const colors = card ? tileColor(card.color) : null
-  const accentColor = colors?.background
-  const onAccentColor = colors?.text
-  useLayoutEffect(() => {
-    if (!accentColor || !onAccentColor) return
-    const root = document.documentElement.style
-    root.setProperty(ROOT_ACCENT, accentColor)
-    root.setProperty(ROOT_ON_ACCENT, onAccentColor)
-  }, [accentColor, onAccentColor])
-
-  // Remove the root colours only when checkout closes, not between cards,
-  // so there is never a frame where the canvas falls back to the wallet colour.
-  useLayoutEffect(
-    () => () => {
-      const root = document.documentElement.style
-      root.removeProperty(ROOT_ACCENT)
-      root.removeProperty(ROOT_ON_ACCENT)
-    },
-    [],
-  )
 
   // Keyboard: arrows switch, Escape closes. Window-level so it works wherever focus is.
   useEffect(() => {
@@ -175,15 +148,14 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
     else if (action === 'previous' && previous) changeCard(previous.id)
   }
 
-  const accent = { '--card-accent': accentColor, '--card-on-accent': onAccentColor } as CSSProperties
+  // The accent is scoped to the card face (its bands) so the stage stays dark.
+  // No text sits on the accent any more, so its paired text colour is unused.
+  const accent = { '--card-accent': tileColor(card.color).background } as CSSProperties
   const settled = offset.x === 0 && offset.y === 0
 
   return (
-    <div className="checkout" role="dialog" aria-modal="true" aria-labelledby="checkout-store" style={accent}>
+    <div className="checkout" role="dialog" aria-modal="true" aria-labelledby="checkout-store">
       <div className="checkout__top" data-testid="checkout-header">
-        <h1 id="checkout-store" className="checkout__store">
-          {card.storeName}
-        </h1>
         <button ref={closeRef} type="button" className="checkout__close" aria-label="Close card" onClick={onClose}>
           <CloseIcon />
         </button>
@@ -197,44 +169,55 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
         onPointerUp={(event) => endDrag(event, false)}
         onPointerCancel={(event) => endDrag(event, true)}
       >
+        {/* Outer element carries the drag offset; the face inside is the visible card. */}
         <div
           key={card.id}
           className={settled ? 'checkout__card checkout__card--settled' : 'checkout__card'}
           style={settled ? undefined : { transform: `translate(${offset.x}px, ${offset.y}px)` }}
         >
-          <BarcodeView barcode={card.barcode} label={`${card.storeName} barcode`} />
+          <div className="checkout__face" data-testid="checkout-card" style={accent}>
+            <span className="checkout__band" aria-hidden="true" />
+            <div className="checkout__code">
+              <BarcodeView barcode={card.barcode} label={`${card.storeName} barcode`} />
+            </div>
+            <span className="checkout__band checkout__band--bottom" aria-hidden="true" />
+          </div>
         </div>
       </div>
 
-      {cards.length > 1 && (
-        <div className="checkout__nav">
-          <button
-            type="button"
-            className="checkout__step"
-            aria-label="Previous card"
-            disabled={!previous}
-            onClick={() => previous && changeCard(previous.id)}
-          >
-            <BackIcon />
-          </button>
-          <p className="checkout__dots" aria-hidden="true">
-            {cards.map((item) => (
-              <span key={item.id} className={item.id === card.id ? 'checkout__dot checkout__dot--active' : 'checkout__dot'} />
-            ))}
-          </p>
-          <button
-            type="button"
-            className="checkout__step"
-            aria-label="Next card"
-            disabled={!next}
-            onClick={() => next && changeCard(next.id)}
-          >
-            <ChevronIcon />
-          </button>
-        </div>
-      )}
-
-      <div className="checkout__bottom" data-testid="checkout-footer" aria-hidden="true" />
+      {/* Bottom information region: store name directly above the pagination. */}
+      <div className="checkout__info" data-testid="checkout-info">
+        <h1 id="checkout-store" className="checkout__store">
+          {card.storeName}
+        </h1>
+        {cards.length > 1 && (
+          <div className="checkout__nav">
+            <button
+              type="button"
+              className="checkout__step"
+              aria-label="Previous card"
+              disabled={!previous}
+              onClick={() => previous && changeCard(previous.id)}
+            >
+              <BackIcon />
+            </button>
+            <p className="checkout__dots" aria-hidden="true">
+              {cards.map((item) => (
+                <span key={item.id} className={item.id === card.id ? 'checkout__dot checkout__dot--active' : 'checkout__dot'} />
+              ))}
+            </p>
+            <button
+              type="button"
+              className="checkout__step"
+              aria-label="Next card"
+              disabled={!next}
+              onClick={() => next && changeCard(next.id)}
+            >
+              <ChevronIcon />
+            </button>
+          </div>
+        )}
+      </div>
 
       <p className="visually-hidden" role="status" aria-live="polite">
         {switched ? `${card.storeName}, card ${index + 1} of ${cards.length}` : ''}

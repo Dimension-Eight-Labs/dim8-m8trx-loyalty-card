@@ -1,6 +1,7 @@
 /**
- * Palette contrast check. Tiles and the checkout header band both put the
- * store name in `text` on `background`; every pair must meet WCAG 2.x AA
+ * Palette contrast check. Wallet tiles put the store name in `text` on
+ * `background` (checkout only uses `background` for the card's thin bands
+ * since v0.4.1); every pair must meet WCAG 2.x AA
  * (4.5:1) — computed here from the hex values rather than trusted from comments.
  */
 import { describe, expect, it } from 'vitest'
