@@ -96,7 +96,7 @@ describe('Iteration 2 → 3 migration', () => {
     repo.close()
 
     const { version, records } = await readRaw()
-    expect(version).toBe(2)
+    expect(version).toBe(3)
     expect(records).toHaveLength(2)
     expect(records.every((record) => readCardRecord(record) !== null)).toBe(true)
     expect(records.some((record) => 'cardNumber' in (record as object))).toBe(false)
@@ -126,6 +126,105 @@ describe('Iteration 2 → 3 migration', () => {
   it('opening an empty v1 database works', async () => {
     await seedV1([])
     await expect(createIndexedDbCardRepository({ indexedDB: factory }).list()).resolves.toEqual([])
+  })
+})
+
+/** Builds a v2 (v0.3.x) database: `cards` store only, no wallet-order metadata. */
+function seedV2(records: unknown[], dbName = DEFAULT_DB_NAME): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(dbName, 2)
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('cards', { keyPath: 'id' })
+      for (const record of records) store.add(record)
+    }
+    request.onsuccess = () => {
+      request.result.close()
+      resolve()
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function readOrder(dbName = DEFAULT_DB_NAME): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(dbName)
+    request.onsuccess = () => {
+      const db = request.result
+      const get = db.transaction('meta').objectStore('meta').get('walletOrder')
+      get.onsuccess = () => {
+        db.close()
+        resolve(get.result)
+      }
+      get.onerror = () => reject(get.error)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+/** A v2 card record as v0.3.x wrote it. */
+function v2Card(id: string, storeName: string, createdAt: string) {
+  return {
+    id,
+    schemaVersion: 2,
+    storeName,
+    color: 'teal',
+    barcode: { kind: 'generated', format: 'code128', value: id },
+    createdAt,
+    updatedAt: createdAt,
+  }
+}
+
+describe('v0.3.x → v0.4.0 (schema 2 → 3) wallet-order migration', () => {
+  it('seeds the wallet order from the existing display order, so nothing moves', async () => {
+    // Key order (a, b, c) differs from creation order (c, a, b) on purpose.
+    await seedV2([
+      v2Card('a', 'Second', '2026-02-01T00:00:00.000Z'),
+      v2Card('b', 'Third', '2026-03-01T00:00:00.000Z'),
+      v2Card('c', 'First', '2026-01-01T00:00:00.000Z'),
+    ])
+    const repo = createIndexedDbCardRepository({ indexedDB: factory })
+
+    expect((await repo.list()).map((card) => card.storeName)).toEqual(['First', 'Second', 'Third'])
+    repo.close()
+    await expect(readOrder()).resolves.toEqual(['c', 'a', 'b'])
+    const { version, records } = await readRaw()
+    expect(version).toBe(3)
+    // Card records are not rewritten by this step.
+    expect(records).toContainEqual(v2Card('a', 'Second', '2026-02-01T00:00:00.000Z'))
+  })
+
+  it('leaves unreadable records out of the seeded order but keeps them stored', async () => {
+    const stranger = { id: 'z', schemaVersion: 99 }
+    await seedV2([v2Card('a', 'Only', '2026-01-01T00:00:00.000Z'), stranger])
+    const repo = createIndexedDbCardRepository({ indexedDB: factory })
+    await expect(repo.list()).resolves.toHaveLength(1)
+    repo.close()
+    await expect(readOrder()).resolves.toEqual(['a'])
+    expect((await readRaw()).records).toContainEqual(stranger)
+  })
+
+  it('migrated v0.3.x cards can be reordered and keep the new order after a restart', async () => {
+    await seedV2([v2Card('a', 'A', '2026-01-01T00:00:00.000Z'), v2Card('b', 'B', '2026-02-01T00:00:00.000Z')])
+    const repo = createIndexedDbCardRepository({ indexedDB: factory })
+    await repo.reorder(['b', 'a'])
+    repo.close()
+    const reopened = createIndexedDbCardRepository({ indexedDB: factory })
+    expect((await reopened.list()).map((card) => card.id)).toEqual(['b', 'a'])
+  })
+
+  it('seeds the order for a v1 database after its records are migrated', async () => {
+    await seedV1(v1Records)
+    const repo = createIndexedDbCardRepository({ indexedDB: factory })
+    await repo.list()
+    repo.close()
+    await expect(readOrder()).resolves.toEqual(['a', 'b'])
+  })
+
+  it('creates an empty order for a brand-new database', async () => {
+    const repo = createIndexedDbCardRepository({ indexedDB: factory })
+    await repo.list()
+    repo.close()
+    await expect(readOrder()).resolves.toEqual([])
   })
 })
 

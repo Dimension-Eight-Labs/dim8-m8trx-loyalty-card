@@ -11,14 +11,22 @@
 import type { CardChanges, LoyaltyCard, NewCardInput } from './card.ts'
 
 export interface CardRepository {
-  /** All readable cards in wallet order (oldest first). */
+  /** All readable cards in the user's wallet order. New cards are last. */
   list(): Promise<LoyaltyCard[]>
-  /** Validates and stores a new card. The store name is trimmed; barcode data never is. */
+  /** Validates and stores a new card at the end of the wallet order. The store name is trimmed; barcode data never is. */
   create(input: NewCardInput): Promise<LoyaltyCard>
-  /** Renames and/or recolours a card and bumps `updatedAt`. */
+  /** Renames and/or recolours a card and bumps `updatedAt`. Never changes its position. */
   update(id: string, changes: CardChanges): Promise<LoyaltyCard>
-  /** Removes a card. Rejects if it does not exist. */
+  /** Removes a card (and its place in the wallet order). Rejects if it does not exist. */
   delete(id: string): Promise<void>
+  /**
+   * Saves a new wallet order. `orderedIds` must name every card that `list()`
+   * returns exactly once and nothing else; otherwise it rejects with a
+   * CardValidationError and nothing is saved (e.g. another tab added or
+   * deleted a card meanwhile). Atomic: either the whole new order is stored
+   * or the previous one remains. Card records themselves are not rewritten.
+   */
+  reorder(orderedIds: readonly string[]): Promise<void>
 }
 
 /** Rejection used when input fails domain validation. */

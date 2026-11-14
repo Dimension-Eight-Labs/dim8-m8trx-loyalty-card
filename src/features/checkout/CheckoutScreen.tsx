@@ -15,6 +15,15 @@
  *   never lands on an unexpected card.
  * - Page scrolling, rubber-banding, and pinch-zoom are suppressed while open
  *   (body class + `touch-action: none`); restored on close.
+ * - Safe-area colour (v0.4.0 fix): while open, the active card's accent and
+ *   text colours are also published on <html> as --checkout-accent /
+ *   --checkout-on-accent, and the document canvas (html/body) is painted
+ *   with them. On iPhone the area around the notch / Dynamic Island and the
+ *   home indicator can be painted from the document canvas rather than from
+ *   the fixed checkout bands, so painting only the bands left that area in
+ *   the colour of the wallet or of the first card shown. The root properties
+ *   are rewritten before paint whenever the active card changes and removed
+ *   on close, so header, notch area and bottom strip always share one value.
  * - Requests a screen wake lock where supported (useWakeLock).
  * - Card changes are announced through a polite live region.
  *
@@ -34,13 +43,17 @@
  *   close. Anything shorter snaps back.
  * - pointercancel (the browser or OS took the gesture) never acts.
  */
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 import { BackIcon, ChevronIcon, CloseIcon } from '../../components/icons.tsx'
 import { BarcodeView } from '../barcodes/BarcodeView.tsx'
 import type { LoyaltyCard } from '../cards/card.ts'
 import { tileColor } from '../cards/tileColors.ts'
 import { gestureAction, GESTURE_DEAD_ZONE_PX, type Axis } from './gesture.ts'
 import { useWakeLock } from './useWakeLock.ts'
+
+/** Root (<html>) custom properties owned by checkout while it is open; read by app.css. */
+export const ROOT_ACCENT = '--checkout-accent'
+export const ROOT_ON_ACCENT = '--checkout-on-accent'
 
 export interface CheckoutScreenProps {
   cards: LoyaltyCard[]
@@ -67,12 +80,39 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
 
   useWakeLock(true)
 
-  // Lock page scrolling while open; restore on close.
+  // Lock page scrolling while open; restore on close. Focus the × once, on
+  // open only: switching cards must not move focus.
   useEffect(() => {
     document.documentElement.classList.add('checkout-open')
     closeRef.current?.focus({ preventScroll: true })
     return () => document.documentElement.classList.remove('checkout-open')
   }, [])
+
+  // Publish the ACTIVE card's colours on <html> (see the header comment).
+  // Layout effect so the root updates in the same frame as the header: a
+  // passive effect could paint one frame with the previous card's colour.
+  // Keyed on the colour values, so it re-runs on every card switch rather
+  // than capturing the colour of the card checkout opened with.
+  const colors = card ? tileColor(card.color) : null
+  const accentColor = colors?.background
+  const onAccentColor = colors?.text
+  useLayoutEffect(() => {
+    if (!accentColor || !onAccentColor) return
+    const root = document.documentElement.style
+    root.setProperty(ROOT_ACCENT, accentColor)
+    root.setProperty(ROOT_ON_ACCENT, onAccentColor)
+  }, [accentColor, onAccentColor])
+
+  // Remove the root colours only when checkout closes, not between cards,
+  // so there is never a frame where the canvas falls back to the wallet colour.
+  useLayoutEffect(
+    () => () => {
+      const root = document.documentElement.style
+      root.removeProperty(ROOT_ACCENT)
+      root.removeProperty(ROOT_ON_ACCENT)
+    },
+    [],
+  )
 
   // Keyboard: arrows switch, Escape closes. Window-level so it works wherever focus is.
   useEffect(() => {
@@ -135,8 +175,7 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
     else if (action === 'previous' && previous) changeCard(previous.id)
   }
 
-  const colors = tileColor(card.color)
-  const accent = { '--card-accent': colors.background, '--card-on-accent': colors.text } as CSSProperties
+  const accent = { '--card-accent': accentColor, '--card-on-accent': onAccentColor } as CSSProperties
   const settled = offset.x === 0 && offset.y === 0
 
   return (

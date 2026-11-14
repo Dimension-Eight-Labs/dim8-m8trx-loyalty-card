@@ -7,7 +7,7 @@ The product does one job on purpose. It has **no accounts, advertisements,
 analytics, cloud backend, or synchronization**, and it loads nothing from
 third-party hosts.
 
-## Current status (v0.3.2 card wallet)
+## Current status (v0.4.0 card wallet, development)
 
 Capture a physical loyalty card once, then show a clean, freshly drawn barcode
 at checkout.
@@ -15,9 +15,12 @@ at checkout.
 - **Wallet home screen**: a grid of square, coloured tiles showing the store
   name and a miniature card preview (a decorative bar, QR-style or grid motif
   for the barcode type, or the saved artwork for image cards). The motif never
-  encodes the card's value; no number is shown. Tap a tile to open the card. Long-press (or right-click) a tile,
-  or use its small **⋯** button, for **Rename**, **Change colour**, and
-  **Delete** (with confirmation). A small **+** in the top corner adds a card.
+  encodes the card's value; no number is shown. Tap a tile to open the card.
+  **Press and hold** a tile (touch) or **drag** it (mouse/pen) to rearrange
+  the wallet; the order is saved on the device. A tile's small **⋯** button
+  opens **Rename**, **Change colour**, **Move earlier / later / to first /
+  to last** (the keyboard-accessible way to reorder), and **Delete** (with
+  confirmation). A small **+** in the top corner adds a card.
 - **Checkout mode**: a full-screen digital card — a narrow header band in the
   card's colour with the store name in large type and a small **×**, a white
   stage with the barcode as large as the screen allows, and a matching narrow
@@ -42,6 +45,46 @@ at checkout.
   migrated automatically and are never deleted.
 - Dark interface, keyboard accessible; no accounts, backend, analytics, or
   third-party requests.
+
+### v0.4.0 — Card order and checkout safe-area colour (Iteration 4C)
+
+Development version; not published or deployed.
+
+**Safe-area colour fix.** On a physical iPhone (Brave, HTTPS) the area
+around the camera cutout kept the first card's accent colour after swiping
+to a differently coloured card, although the header updated. The header and
+bottom strip already followed the active card, but the document canvas
+(`<html>`/`<body>`) never did, and iOS can paint the notch and
+home-indicator areas from that canvas. Checkout now publishes the active
+card's colours on `<html>` as `--checkout-accent` / `--checkout-on-accent`
+(rewritten before paint on every card switch, removed on close), paints the
+canvas with them while open, and the header and bottom strip read the same
+value. Text contrast still comes from the palette pairs (all ≥ 4.5:1). Host
+tests cover the colour values through repeated swipes and cleanup on close;
+**actual notch painting must still be confirmed on an iPhone** (checklist
+below).
+
+**User-defined card order.**
+
+- *Touch*: press and hold a tile for 500 ms without moving, then drag.
+  Moving more than 10 px before that counts as scrolling and nothing is
+  dragged. Once a drag starts, the page stops scrolling under the finger and
+  auto-scrolls near the top/bottom edge.
+- *Mouse/pen*: press and move at least 6 px; a press without movement is an
+  ordinary click.
+- The dragged tile lifts and follows the pointer; a dashed outline marks
+  where it will land, and the other tiles slide aside (no slide under
+  reduced motion). Release saves; Escape or a cancelled pointer reverts. A
+  drag never opens the card, and long-press no longer opens the management
+  menu — the **⋯** button is its only entry point.
+- *Keyboard / screen readers*: **⋯** → **Move earlier**, **Move later**,
+  **Move to first**, **Move to last** ("earlier/later" follow reading order,
+  whatever the column count; unavailable moves are disabled). Focus returns
+  to the moved card and its new position is announced.
+- New cards are added at the end; renaming or recolouring never moves a
+  card. The saved order is also checkout's left/right order.
+- The order is stored in IndexedDB (see *Data model*). If saving fails the
+  previous order stays and a message is shown.
 
 ### v0.3.2 — QR image-import fix and wallet refinements (Iteration 4B)
 
@@ -201,7 +244,9 @@ store requires GS1-128.
 - **Duplicates are allowed.** Two cards may share a store or barcode.
 - **Barcode data isn't editable.** To fix a wrong barcode, delete the card
   and add it again. Rename and colour can be changed at any time.
-- **Order**: oldest first; renaming or recolouring never reorders tiles.
+- **Order**: chosen by the user (drag or the ⋯ menu's move actions) and
+  saved on the device; new cards go last; renaming or recolouring never
+  reorders tiles.
 - **Local only.** Cards exist only in this browser profile on this device.
   There is no backup, export, or sync. Clearing site data, uninstalling the
   PWA (on some platforms), or using a private window loses them.
@@ -230,16 +275,20 @@ store requires GS1-128.
   the lock before iOS 18.4 — unverified, check on a device.
 - **Screen brightness** cannot be controlled by a web app on any platform,
   including iPhone. Turn brightness up manually if a scanner struggles.
-- **Long-press** uses Pointer Events with a 500 ms hold and 10 px movement
-  tolerance; the iOS callout and text selection are suppressed on tiles. The
-  **⋯** button is always available as an alternative.
+- **Reordering** uses Pointer Events: touch needs a 500 ms hold with 10 px
+  movement tolerance, mouse/pen a 6 px movement. After a touch drag starts,
+  a non-passive `touchmove` listener stops page scrolling; whether WebKit
+  honours this in every iOS browser must be confirmed on a device. The iOS
+  callout and text selection are suppressed on tiles. The **⋯** menu's move
+  actions are always available as an alternative.
 - **Swipe** uses Pointer Events with `touch-action: none` on the card. In iOS
   Safari (not installed), the system edge-swipe "back" gesture may still win
   at the very edge of the screen.
 
 ### Data model and migration
 
-Database `dim8-loyalty-card`, object store `cards` (keyed by `id`).
+Database `dim8-loyalty-card`, object store `cards` (keyed by `id`), plus
+(from version 3) a small `meta` store.
 
 - **Version 1** (v0.2.0): `{ id, storeName, cardNumber, notes, createdAt, updatedAt }`.
 - **Version 2** (v0.3.0): `{ id, schemaVersion: 2, storeName, color, barcode,
@@ -248,6 +297,18 @@ Database `dim8-loyalty-card`, object store `cards` (keyed by `id`).
   - `{ kind: 'image', image: Blob, detectedFormat?, detectedValue? }` — cropped
     picture fallback;
   - `{ kind: 'text', value }` — a number without a known format.
+- **Version 3** (v0.4.0): card records are unchanged; a new `meta` store
+  holds `walletOrder`, an array of card IDs in the user's order. Keeping the
+  order outside the card records means a reorder rewrites one small array
+  (never card data or stored artwork), and rename/recolour cannot move a
+  card. The 2 → 3 upgrade seeds `walletOrder` from the existing display
+  order (oldest first), so nothing moves on upgrade. The order is read
+  defensively: listed cards first, then any readable card missing from the
+  list (oldest first); duplicate or stale IDs are ignored, and IDs of records
+  this version can't read keep their place. A reorder must name every card
+  exactly once or it is rejected without saving. Opening a version-3
+  database with v0.3.x fails with "Couldn't open card storage" and leaves
+  the data untouched.
 
 The upgrade runs inside IndexedDB's version-change transaction, so it either
 completes or leaves version 1 untouched. Each v0.2.0 card becomes a
@@ -345,7 +406,8 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
   for every format, leading zeros, symbology preservation, quiet zones,
   validation and check digits.
 - **Persistence and migration**: the real repository over `fake-indexeddb`,
-  including Blob image storage and a seeded v0.2.0 database.
+  including Blob image storage, seeded v0.2.0 and v0.3.x databases, and the
+  wallet-order metadata (append, reorder, restart, damaged metadata).
 - **Live scanning** (`camera.test.ts`): the scan loop with fake frames
   (not-ready/zero-size and blank frames, thrown capture and decoder errors,
   continued scheduling, pacing, Code 39 confirmation, exactly-once delivery,
@@ -364,8 +426,9 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
   object URLs revoked), palette contrast ≥ 4.5:1, checkout bands and colours,
   swipe-down close, and taps/short/diagonal/upward/cancelled gestures not
   closing.
-- **App flows**: wallet, long-press, menu, rename/recolour/delete, checkout
-  close/swipe/keys/wake lock, all three capture paths, crop-retry and image
+- **App flows**: wallet, drag/keyboard reordering, menu, rename/recolour/delete, checkout
+  close/swipe/keys/wake lock, checkout accent on the document root across
+  repeated swipes, all three capture paths, crop-retry and image
   fallback, failure messages, scanner stall guidance, Scan again, late and
   duplicate camera callbacks. Camera and canvas decoding are faked here.
 
@@ -401,6 +464,32 @@ results.
 9. **Import** the original UDF and Kroger screenshots; then test a rotated
    copy and the crop-and-retry path.
 
+**v0.4.0 checks on iPhone (not yet performed).** jsdom host tests cannot
+show WebKit safe-area painting, real touch arbitration, scrolling during a
+long-press, or the grid animation.
+
+1. **Safe-area colour.** Create cards in a dark colour (Slate) and a
+   contrasting one (Red), plus a light one (Yellow or White). Open Slate:
+   the notch / Dynamic Island area, header and bottom strip (including the
+   home-indicator area) are all Slate. Swipe to Red: all three change
+   together, immediately. Swipe back and forth several times, also with the
+   chevrons. Close: the wallet shows its normal dark background with no
+   leftover card colour at the top or bottom. Repeat in Brave, Safari and
+   the installed PWA, and on the narrowest available iPhone.
+2. **Drag activation.** Press and hold a tile: after about half a second it
+   lifts. Drag it to the first position and release; it stays there.
+   Quit and reopen the app (and once in airplane mode): the order is kept.
+3. **Scrolling.** With enough cards to scroll, swipe quickly over tiles: the
+   page scrolls and nothing lifts. During a drag the page must not scroll
+   under the finger; holding near the top/bottom edge auto-scrolls.
+4. **No accidental actions.** Releasing a drag never opens the card or the
+   ⋯ menu; a quick tap still opens the card; ⋯ still opens the menu.
+5. **Narrow two-column layout.** On the narrowest iPhone, drag between
+   columns and rows, including the last tile of an odd-length wallet; check
+   the dashed landing outline and the sliding tiles look right.
+6. **Keyboard / VoiceOver.** ⋯ → Move earlier/later/to first/to last;
+   VoiceOver announces the new position.
+
 **v0.3.2 checks on iPhone (not yet performed).**
 
 1. Import the QR screenshots that failed after v0.3.1 (Photos and Files);
@@ -415,8 +504,8 @@ results.
 
 - iPhone Safari and installed PWA: camera permission prompt, rear camera,
   scanning a real card under typical light; Photos/Files import; pinch-zoom
-  in the cropper; long-press on tiles; horizontal swipe in checkout; wake lock.
-- Android Chrome: the same, plus haptic feedback on long-press.
+  in the cropper; press-and-hold drag on tiles; horizontal swipe in checkout; wake lock.
+- Android Chrome: the same, plus haptic feedback when a drag starts.
 - **Scan the displayed barcodes with real checkout hardware** for each format
   you rely on. A successful redraw is not proof of scanner compatibility.
 

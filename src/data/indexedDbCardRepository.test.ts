@@ -8,7 +8,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NewCardInput } from '../features/cards/card.ts'
 import { CardNotFoundError, CardValidationError } from '../features/cards/CardRepository.ts'
-import { createIndexedDbCardRepository, type IndexedDbCardRepositoryOptions } from './indexedDbCardRepository.ts'
+import { createIndexedDbCardRepository, DEFAULT_DB_NAME, type IndexedDbCardRepositoryOptions } from './indexedDbCardRepository.ts'
 
 // Node's own Blob (structured-cloneable, unlike jsdom's). Loaded by a
 // non-literal specifier so the app's browser-only type config needn't include
@@ -249,7 +249,7 @@ describe('IndexedDB card repository', () => {
 
     // Simulate a newer app version in another tab opening a higher version.
     await new Promise<void>((resolve, reject) => {
-      const request = factory.open('upgrade-test', 3)
+      const request = factory.open('upgrade-test', 4)
       request.onsuccess = () => {
         request.result.close()
         resolve()
@@ -257,5 +257,150 @@ describe('IndexedDB card repository', () => {
       request.onblocked = () => reject(new Error('upgrade was blocked by the open connection'))
       request.onerror = () => reject(request.error)
     })
+  })
+})
+
+/** Runs `work` against the raw database (another "tab"), bypassing the repository. */
+function rawWrite(work: (tx: IDBTransaction) => void, dbName = DEFAULT_DB_NAME): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(dbName)
+    request.onsuccess = () => {
+      const db = request.result
+      const tx = db.transaction(['cards', 'meta'], 'readwrite')
+      work(tx)
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onabort = () => reject(tx.error)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function readStoredOrder(dbName = DEFAULT_DB_NAME): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(dbName)
+    request.onsuccess = () => {
+      const db = request.result
+      const get = db.transaction('meta').objectStore('meta').get('walletOrder')
+      get.onsuccess = () => {
+        db.close()
+        resolve(get.result)
+      }
+      get.onerror = () => reject(get.error)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+describe('wallet order (v0.4.0)', () => {
+  /** Three cards created at the same instant with IDs that sort opposite to creation. */
+  async function threeCards() {
+    const ids = ['z', 'y', 'x', 'w']
+    const time = clock()
+    const repo = makeRepository({ now: time.now, generateId: () => ids.shift() as string })
+    const a = await repo.create({ ...coffee, storeName: 'A' })
+    const b = await repo.create({ ...coffee, storeName: 'B' })
+    const c = await repo.create({ ...coffee, storeName: 'C' })
+    return { repo, a, b, c }
+  }
+
+  const names = async (repo: { list: () => Promise<{ storeName: string }[]> }) => (await repo.list()).map((card) => card.storeName)
+
+  it('lists cards in the order they were added, even with identical timestamps', async () => {
+    const { repo } = await threeCards()
+    await expect(names(repo)).resolves.toEqual(['A', 'B', 'C'])
+    await expect(readStoredOrder()).resolves.toEqual(['z', 'y', 'x'])
+  })
+
+  it('persists a manual reorder across a restart and appends new cards at the end', async () => {
+    const { repo, a, b, c } = await threeCards()
+    await repo.reorder([c.id, a.id, b.id])
+    repo.close()
+
+    const reopened = makeRepository({ generateId: () => 'new' })
+    await expect(names(reopened)).resolves.toEqual(['C', 'A', 'B'])
+    await reopened.create({ ...coffee, storeName: 'D' })
+    await expect(names(reopened)).resolves.toEqual(['C', 'A', 'B', 'D'])
+  })
+
+  it('keeps positions when cards are renamed or recoloured', async () => {
+    const { repo, a, b, c } = await threeCards()
+    await repo.reorder([b.id, c.id, a.id])
+    await repo.update(a.id, { storeName: 'A2' })
+    await repo.update(b.id, { color: 'purple' })
+    await expect(names(repo)).resolves.toEqual(['B', 'C', 'A2'])
+  })
+
+  it('removes deleted cards from the stored order', async () => {
+    const { repo, b } = await threeCards()
+    await repo.delete(b.id)
+    await expect(readStoredOrder()).resolves.toEqual(['z', 'x'])
+    await expect(names(repo)).resolves.toEqual(['A', 'C'])
+  })
+
+  it('rejects invalid reorder requests without saving anything', async () => {
+    const { repo, a, b, c } = await threeCards()
+    await repo.reorder([b.id, a.id, c.id])
+
+    await expect(repo.reorder([a.id, b.id])).rejects.toBeInstanceOf(CardValidationError) // missing one
+    await expect(repo.reorder([a.id, b.id, c.id, 'ghost'])).rejects.toBeInstanceOf(CardValidationError) // extra
+    await expect(repo.reorder([a.id, a.id, b.id])).rejects.toBeInstanceOf(CardValidationError) // duplicate
+    await expect(repo.reorder([a.id, b.id, 'ghost'])).rejects.toBeInstanceOf(CardValidationError) // unknown
+    await expect(names(repo)).resolves.toEqual(['B', 'A', 'C'])
+  })
+
+  it('recovers from missing order metadata: oldest first, and new cards still go last', async () => {
+    const time = clock()
+    const ids = ['m1', 'm2', 'm3']
+    const repo = makeRepository({ now: time.now, generateId: () => ids.shift() as string })
+    await repo.create({ ...coffee, storeName: 'Old' })
+    time.advance()
+    await repo.create({ ...coffee, storeName: 'Newer' })
+    repo.close()
+    await rawWrite((tx) => tx.objectStore('meta').delete('walletOrder'))
+
+    const reopened = makeRepository({ now: time.now, generateId: () => ids.shift() as string })
+    await expect(names(reopened)).resolves.toEqual(['Old', 'Newer'])
+    time.advance()
+    await reopened.create({ ...coffee, storeName: 'Newest' })
+    await expect(readStoredOrder()).resolves.toEqual(['m1', 'm2', 'm3'])
+  })
+
+  it('tolerates duplicate, stale and malformed order entries without hiding any card', async () => {
+    const { repo, a, b, c } = await threeCards()
+    repo.close()
+    await rawWrite((tx) => tx.objectStore('meta').put([b.id, b.id, 'ghost', a.id], 'walletOrder'))
+    // Listed cards first (B, A), then the unlisted C.
+    await expect(names(makeRepository())).resolves.toEqual(['B', 'A', 'C'])
+
+    await rawWrite((tx) => tx.objectStore('meta').put('not-a-list', 'walletOrder'))
+    const recovered = makeRepository()
+    await expect(names(recovered)).resolves.toHaveLength(3)
+    // A full reorder rewrites clean metadata.
+    await recovered.reorder([c.id, b.id, a.id])
+    await expect(readStoredOrder()).resolves.toEqual([c.id, b.id, a.id])
+  })
+
+  it('keeps the position of records this version cannot read', async () => {
+    const { repo, a, b, c } = await threeCards()
+    repo.close()
+    await rawWrite((tx) => {
+      tx.objectStore('cards').put({ id: 'future', schemaVersion: 99 })
+      tx.objectStore('meta').put([a.id, 'future', b.id, c.id], 'walletOrder')
+    })
+    const reopened = makeRepository()
+    await expect(names(reopened)).resolves.toEqual(['A', 'B', 'C'])
+    await reopened.reorder([c.id, b.id, a.id])
+    await expect(readStoredOrder()).resolves.toEqual([c.id, b.id, a.id, 'future'])
+  })
+
+  it('reorders without rewriting card records', async () => {
+    const { repo, a, b, c } = await threeCards()
+    const before = await repo.list()
+    await repo.reorder([c.id, b.id, a.id])
+    const after = await repo.list()
+    expect(after).toEqual([before[2], before[1], before[0]])
   })
 })

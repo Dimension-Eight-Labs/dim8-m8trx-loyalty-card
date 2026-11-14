@@ -1,9 +1,18 @@
 /**
- * Card management menu opened by long-press or a tile's "⋯" button.
+ * Card management menu opened by a tile's "⋯" button (its only entry point;
+ * long-press now rearranges tiles instead).
  *
  * Three small steps inside one dialog: the menu (Rename / Change colour /
- * Delete), a rename form, and a colour picker. Delete hands back to the parent,
- * which shows the separate DeleteCardDialog confirmation.
+ * move actions / Delete), a rename form, and a colour picker. Delete hands
+ * back to the parent, which shows the separate DeleteCardDialog confirmation.
+ *
+ * Move actions are the keyboard- and screen-reader-accessible alternative to
+ * dragging. "Earlier" and "later" mean one place back or forward in reading
+ * order (left to right, then top to bottom), whatever the column count.
+ * Actions that cannot apply (e.g. "Move earlier" on the first card) are
+ * disabled, and the whole group is hidden when there is only one card.
+ * `onMove` resolves to an error message or null; on failure the menu stays
+ * open with the message and the saved order is unchanged.
  *
  * There is intentionally no way to edit barcode data: to fix a wrong barcode
  * the user deletes the card and adds it again.
@@ -15,20 +24,42 @@ import { useId, useRef, useState, type FormEvent } from 'react'
 import { Dialog } from '../../components/Dialog.tsx'
 import { CARD_LIMITS, validateStoreName, type LoyaltyCard } from '../cards/card.ts'
 import { ColorPicker } from '../cards/ColorPicker.tsx'
+import type { MoveTarget } from './walletOrder.ts'
 
 export interface CardMenuProps {
   card: LoyaltyCard
+  /** Zero-based position of the card in the wallet. */
+  position: number
+  /** Number of cards in the wallet. */
+  count: number
   onClose: () => void
   onRename: (storeName: string) => Promise<string | null>
   onRecolor: (color: string) => Promise<string | null>
+  onMove: (target: MoveTarget) => Promise<string | null>
   onDelete: () => void
 }
 
 type Step = 'menu' | 'rename' | 'color'
 
-export function CardMenu({ card, onClose, onRename, onRecolor, onDelete }: CardMenuProps) {
+export function CardMenu({ card, position, count, onClose, onRename, onRecolor, onMove, onDelete }: CardMenuProps) {
   const [step, setStep] = useState<Step>('menu')
+  const [moveError, setMoveError] = useState<string | null>(null)
+  const [moving, setMoving] = useState(false)
   const titleId = useId()
+  const atStart = position <= 0
+  const atEnd = position >= count - 1
+
+  const move = async (target: MoveTarget) => {
+    if (moving) return
+    setMoving(true)
+    setMoveError(null)
+    const message = await onMove(target)
+    // On success the parent closes the menu; only failures land here.
+    if (message) {
+      setMoving(false)
+      setMoveError(message)
+    }
+  }
 
   return (
     <Dialog key={step} labelledBy={titleId} onEscape={step === 'menu' ? onClose : () => setStep('menu')} className="dialog--menu">
@@ -44,6 +75,22 @@ export function CardMenu({ card, onClose, onRename, onRecolor, onDelete }: CardM
             <button type="button" className="menu-list__item" onClick={() => setStep('color')}>
               Change colour
             </button>
+            {count > 1 && (
+              <div className="menu-list__group" role="group" aria-label={`Position ${position + 1} of ${count}`}>
+                <button type="button" className="menu-list__item" disabled={atStart || moving} onClick={() => move('earlier')}>
+                  Move earlier
+                </button>
+                <button type="button" className="menu-list__item" disabled={atEnd || moving} onClick={() => move('later')}>
+                  Move later
+                </button>
+                <button type="button" className="menu-list__item" disabled={atStart || moving} onClick={() => move('first')}>
+                  Move to first
+                </button>
+                <button type="button" className="menu-list__item" disabled={atEnd || moving} onClick={() => move('last')}>
+                  Move to last
+                </button>
+              </div>
+            )}
             <button type="button" className="menu-list__item menu-list__item--danger" onClick={onDelete}>
               Delete
             </button>
@@ -51,6 +98,7 @@ export function CardMenu({ card, onClose, onRename, onRecolor, onDelete }: CardM
               Cancel
             </button>
           </div>
+          <div role="alert">{moveError && <p className="notice notice--error">{moveError}</p>}</div>
         </>
       )}
       {step === 'rename' && <RenameStep titleId={titleId} card={card} onCancel={() => setStep('menu')} onSave={onRename} />}

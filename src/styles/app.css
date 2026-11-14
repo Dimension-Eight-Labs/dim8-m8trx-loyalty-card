@@ -370,8 +370,11 @@
  * the size of a thumb-friendly physical card), more as width allows.
  * Tile backgrounds come from the card's palette colour (inline style), which
  * also sets `--tile-accent` for the miniature card's bands.
+ * The grid is the tiles' offsetParent (position: relative) so the reorder
+ * code can measure each tile's layout slot; see useWalletReorder.ts.
  */
 .wallet-grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(9.5rem, 42vw), 1fr));
   gap: var(--space-3);
@@ -401,7 +404,7 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
-  /* Long-press must open our menu, not iOS's callout or text selection. */
+  /* Press-and-hold starts a reorder drag, not iOS's callout or text selection. */
   -webkit-touch-callout: none;
   user-select: none;
   -webkit-user-select: none;
@@ -456,6 +459,57 @@
 .tile__more:focus-visible {
   outline-color: currentColor;
   outline-offset: -3px;
+}
+
+/* ---- Wallet reordering ----------------------------------------------------
+ * The dragged tile is lifted (slight scale, deeper shadow) and follows the
+ * pointer via --drag-x / --drag-y, which useWalletReorder writes directly.
+ * It uses the individual `translate` / `scale` properties so the FLIP slide
+ * animations (which use `transform`) never fight the drag offset.
+ * Drop-position feedback: a dashed outline (::before) stays in the tile's
+ * current slot, i.e. where it will land on release, while the other tiles
+ * slide aside. The outline undoes the tile's own offset and scale so it sits
+ * exactly on the slot. overflow is released while lifted so the outline isn't
+ * clipped; the main button takes over the rounded clipping.
+ */
+.tile--dragging {
+  --lift-scale: 1.04;
+  z-index: 5;
+  overflow: visible;
+  translate: var(--drag-x, 0px) var(--drag-y, 0px);
+  scale: var(--lift-scale);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22), 0 1.25rem 2.5rem rgb(0 0 0 / 0.55);
+  cursor: grabbing;
+}
+
+.tile--dragging::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 2px dashed rgb(255 255 255 / 0.5);
+  border-radius: inherit;
+  background: rgb(255 255 255 / 0.05);
+  translate: calc(var(--drag-x, 0px) / (-1 * var(--lift-scale))) calc(var(--drag-y, 0px) / (-1 * var(--lift-scale)));
+  scale: calc(1 / var(--lift-scale));
+  pointer-events: none;
+}
+
+.tile--dragging .tile__open {
+  border-radius: inherit;
+  transform: none;
+  cursor: grabbing;
+}
+
+/* While any tile is lifted, the others ignore hover/press styling. */
+.wallet-grid--dragging .tile:not(.tile--dragging) {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile--dragging {
+    --lift-scale: 1;
+  }
 }
 
 /*
@@ -559,6 +613,26 @@
   outline-offset: -3px;
 }
 
+.menu-list__item:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.menu-list__item:disabled:hover {
+  background: var(--color-surface);
+}
+
+/* Move actions: a nested group inside the list, so keep the item dividers. */
+.menu-list__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-list__group .menu-list__item:first-child {
+  border-top: 1px solid var(--color-border);
+}
+
 .menu-list__item--danger {
   color: var(--color-danger);
 }
@@ -622,11 +696,20 @@
  * `checkout-open` on <html> freezes the page underneath (no scroll, no
  * rubber-band); touch-action on the stage stops the browser from scrolling or
  * zooming while the user swipes.
+ *
+ * Safe-area colour: CheckoutScreen also writes the ACTIVE card's colours to
+ * <html> as --checkout-accent / --checkout-on-accent (updated on every card
+ * switch, removed on close). The document canvas is painted with that value
+ * because iOS can paint the notch / home-indicator areas from html/body
+ * rather than from the fixed bands; the bands read the same root value, so
+ * all three regions always change together. --card-accent (inline on
+ * .checkout) and the slate default remain as fallbacks.
  */
 html.checkout-open,
 html.checkout-open body {
   overflow: hidden;
   overscroll-behavior: none;
+  background: var(--checkout-accent, var(--color-bg));
 }
 
 .checkout {
@@ -651,8 +734,8 @@ html.checkout-open body {
     max(var(--space-2), env(safe-area-inset-right))
     var(--space-1)
     max(var(--space-2), env(safe-area-inset-left));
-  background: var(--card-accent, #455a64);
-  color: var(--card-on-accent, #ffffff);
+  background: var(--checkout-accent, var(--card-accent, #455a64));
+  color: var(--checkout-on-accent, var(--card-on-accent, #ffffff));
   /* Hairline edge: keeps very light accents (e.g. White) distinct from the stage. */
   box-shadow: inset 0 -1px rgb(0 0 0 / 0.1);
 }
@@ -673,7 +756,7 @@ html.checkout-open body {
 .checkout__bottom {
   flex: none;
   height: calc(var(--space-3) + env(safe-area-inset-bottom));
-  background: var(--card-accent, #455a64);
+  background: var(--checkout-accent, var(--card-accent, #455a64));
   box-shadow: inset 0 1px rgb(0 0 0 / 0.1);
 }
 

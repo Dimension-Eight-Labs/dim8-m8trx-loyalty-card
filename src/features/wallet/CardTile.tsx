@@ -4,10 +4,12 @@
  *
  * Interaction:
  * - Tap / click / Enter / Space on the tile opens the card at checkout.
- * - Long-press (touch) or right-click opens the management menu.
- * - A small "⋯" button in the corner opens the same menu. It is the
- *   accessible, discoverable alternative to long-press for keyboard, switch,
- *   and screen-reader users, and for anyone who doesn't know about long-press.
+ * - Press-and-hold (touch) or drag (mouse/pen) on the tile rearranges the
+ *   wallet; the handlers come from useWalletReorder via `dragHandlers`.
+ *   Long-press no longer opens the management menu (v0.4.0).
+ * - A small "⋯" button in the corner opens the management menu (rename,
+ *   colour, keyboard move actions, delete). It is the only entry point to
+ *   that menu and never starts a drag.
  *
  * Deliberately shows nothing else: no number, dates, or notes. The preview is
  * decorative (aria-hidden) and never encodes the card's value, so the tile's
@@ -18,39 +20,41 @@ import { MoreIcon } from '../../components/icons.tsx'
 import type { LoyaltyCard } from '../cards/card.ts'
 import { tileColor } from '../cards/tileColors.ts'
 import { CardPreview } from './CardPreview.tsx'
-import { useLongPress } from './useLongPress.ts'
+import type { TileDragHandlers } from './useWalletReorder.ts'
 
 export interface CardTileProps {
   card: LoyaltyCard
   onOpen: (cardId: string) => void
   onOpenMenu: (cardId: string) => void
+  /** Reorder gesture handlers for the tile's main button. */
+  dragHandlers?: TileDragHandlers
+  /** True while this tile is being dragged (lift styling). */
+  dragging?: boolean
   /** Take focus on mount, e.g. when returning from checkout to this card. */
   autoFocus?: boolean
+  /** Changes to a new number to request focus again (e.g. after a keyboard move). */
+  focusToken?: number
 }
 
-export function CardTile({ card, onOpen, onOpenMenu, autoFocus = false }: CardTileProps) {
+export function CardTile({ card, onOpen, onOpenMenu, dragHandlers, dragging = false, autoFocus = false, focusToken }: CardTileProps) {
   const tileRef = useRef<HTMLButtonElement>(null)
   const colors = tileColor(card.color)
-  const longPress = useLongPress(() => {
-    // Touch long-press doesn't focus the button; focus it so the menu can
-    // return focus here when it closes.
-    tileRef.current?.focus({ preventScroll: true })
-    onOpenMenu(card.id)
-  })
 
   useEffect(() => {
     if (autoFocus) tileRef.current?.focus({ preventScroll: false })
   }, [autoFocus])
 
+  useEffect(() => {
+    if (focusToken !== undefined) tileRef.current?.focus({ preventScroll: false })
+  }, [focusToken])
+
   return (
-    <li className="tile" style={{ background: colors.background, color: colors.text, '--tile-accent': colors.background } as CSSProperties}>
-      <button
-        ref={tileRef}
-        type="button"
-        className="tile__open"
-        onClick={() => onOpen(card.id)}
-        {...longPress}
-      >
+    <li
+      className={dragging ? 'tile tile--dragging' : 'tile'}
+      data-card-id={card.id}
+      style={{ background: colors.background, color: colors.text, '--tile-accent': colors.background } as CSSProperties}
+    >
+      <button ref={tileRef} type="button" className="tile__open" onClick={() => onOpen(card.id)} {...dragHandlers}>
         <CardPreview card={card} />
         <span className="tile__name">{card.storeName}</span>
       </button>

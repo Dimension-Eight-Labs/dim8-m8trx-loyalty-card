@@ -15,7 +15,7 @@ import { createIndexedDbCardRepository } from '../data/indexedDbCardRepository.t
 import type { CameraScanOptions, CaptureServices, DecodeResult, FoundResult, ScanDiagnostics } from '../features/add/captureServices.ts'
 import { verifyRoundTrip } from '../features/barcodes/verify.ts'
 import type { CardRepository } from '../features/cards/CardRepository.ts'
-import { LONG_PRESS_MS } from '../features/wallet/useLongPress.ts'
+import { LONG_PRESS_MS } from '../features/wallet/useWalletReorder.ts'
 import { App, LOADING_MESSAGE } from './App.tsx'
 
 let factory: IDBFactory
@@ -102,6 +102,53 @@ async function addManualCard(user: UserEvent, storeName: string, value: string, 
   if (color) await user.click(screen.getByRole('radio', { name: color }))
   await user.click(screen.getByRole('button', { name: 'Save card' }))
   await screen.findByRole('button', { name: storeName })
+}
+
+/** Tile names in on-screen order. */
+function tileOrder(): string[] {
+  return Array.from(document.querySelectorAll('.tile__name'), (node) => node.textContent ?? '')
+}
+
+/**
+ * jsdom has no layout, so give the wallet a fake two-column grid of 100 px
+ * tiles. Offsets follow each tile's current DOM position, so they stay right
+ * after React reorders the tiles. Tile i's centre is centre(i).
+ */
+const TILE = 100
+function layoutWallet() {
+  const grid = document.querySelector('.wallet-grid') as HTMLElement
+  for (const tile of Array.from(grid.children) as HTMLElement[]) {
+    const index = () => Array.from(tile.parentElement?.children ?? []).indexOf(tile)
+    Object.defineProperties(tile, {
+      offsetLeft: { configurable: true, get: () => (index() % 2) * TILE },
+      offsetTop: { configurable: true, get: () => Math.floor(index() / 2) * TILE },
+      offsetWidth: { configurable: true, get: () => TILE },
+      offsetHeight: { configurable: true, get: () => TILE },
+    })
+  }
+}
+function centre(index: number) {
+  return { clientX: (index % 2) * TILE + TILE / 2, clientY: Math.floor(index / 2) * TILE + TILE / 2 }
+}
+
+/** Fakes only setTimeout so the long-press timer is controllable while fake-indexeddb keeps running. */
+function fakeLongPressTimer() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+}
+
+/** Long-press (touch) the tile at `from`, drag it over the tile at `to`, release, then the browser's click. */
+function touchDrag(name: string, from: number, to: number) {
+  const tile = screen.getByRole('button', { name })
+  fakeLongPressTimer()
+  fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, ...centre(from) })
+  act(() => {
+    vi.advanceTimersByTime(LONG_PRESS_MS)
+  })
+  vi.useRealTimers()
+  expect(tile.closest('li')).toHaveClass('tile--dragging')
+  fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', ...centre(to) })
+  fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'touch', ...centre(to) })
+  fireEvent.click(tile)
 }
 
 describe('App', () => {
@@ -561,6 +608,63 @@ describe('App', () => {
     expect(checkout.style.getPropertyValue('--card-on-accent')).toBe('#1a1a1a')
   })
 
+  it('keeps the root safe-area colour in sync with the active card across repeated swipes, and clears it on close', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'Slate Shop', '1', 'Code 128', 'Slate')
+    await addManualCard(user, 'Red Shop', '2', 'Code 128', 'Red')
+    const root = document.documentElement
+    const rootAccent = () => [root.style.getPropertyValue('--checkout-accent'), root.style.getPropertyValue('--checkout-on-accent')]
+    const swipe = (id: number, dx: number) => {
+      const stage = screen.getByTestId('checkout-stage')
+      fireEvent.pointerDown(stage, { pointerId: id, isPrimary: true, clientX: 200, clientY: 200 })
+      fireEvent.pointerMove(stage, { pointerId: id, clientX: 200 + dx, clientY: 202 })
+      fireEvent.pointerUp(stage, { pointerId: id, clientX: 200 + dx, clientY: 202 })
+    }
+    const expectActive = (name: string, accent: string, text: string) => {
+      const checkout = screen.getByRole('dialog', { name })
+      expect(rootAccent()).toEqual([accent, text])
+      // Header and bottom strip read the same value (see app.css).
+      expect(checkout.style.getPropertyValue('--card-accent')).toBe(accent)
+    }
+    expect(rootAccent()).toEqual(['', ''])
+
+    await user.click(screen.getByRole('button', { name: 'Slate Shop' }))
+    expect(root).toHaveClass('checkout-open')
+    expectActive('Slate Shop', '#455a64', '#ffffff')
+    const close = screen.getByRole('button', { name: 'Close card' })
+    expect(close).toHaveFocus()
+
+    // Repeated switches: every change lands immediately, never stuck on the first card's colour.
+    for (let round = 0; round < 3; round++) {
+      swipe(round * 2 + 1, -150)
+      expectActive('Red Shop', '#c62828', '#ffffff')
+      swipe(round * 2 + 2, 150)
+      expectActive('Slate Shop', '#455a64', '#ffffff')
+    }
+    await user.keyboard('{ArrowRight}')
+    expectActive('Red Shop', '#c62828', '#ffffff')
+    // Switching cards does not steal focus back to the × (it stays where it was).
+    expect(close).toHaveFocus()
+
+    await user.click(screen.getByRole('button', { name: 'Close card' }))
+    expect(root).not.toHaveClass('checkout-open')
+    expect(rootAccent()).toEqual(['', ''])
+    expect(screen.getByRole('button', { name: 'Red Shop' })).toHaveFocus()
+  })
+
+  it('publishes the dark text colour on the root for light accents', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'Sunny', '1', 'Code 128', 'Yellow')
+    await addManualCard(user, 'Plain', '2', 'Code 128', 'White')
+    await user.click(screen.getByRole('button', { name: 'Sunny' }))
+    expect(document.documentElement.style.getPropertyValue('--checkout-on-accent')).toBe('#1a1a1a')
+    await user.keyboard('{ArrowRight}')
+    expect(document.documentElement.style.getPropertyValue('--checkout-accent')).toBe('#eceff1')
+    expect(document.documentElement.style.getPropertyValue('--checkout-on-accent')).toBe('#1a1a1a')
+    await user.keyboard('{Escape}')
+    expect(document.documentElement.style.getPropertyValue('--checkout-accent')).toBe('')
+  })
+
   it('closes checkout with a deliberate downward swipe and returns focus to the tile', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'First', '1')
@@ -636,38 +740,219 @@ describe('App', () => {
     expect(screen.getByRole('img', { name: /shop barcode/i })).toBeInTheDocument()
   })
 
-  it('opens the management menu with a long press without opening the card', async () => {
-    const { user } = renderApp()
-    await addManualCard(user, 'Shop', '1')
-    const tile = screen.getByRole('button', { name: 'Shop' })
+  it('rearranges cards with a touch long-press and drag, and keeps the order after a restart', async () => {
+    const first = renderApp()
+    await addManualCard(first.user, 'A', '1')
+    await addManualCard(first.user, 'B', '2')
+    await addManualCard(first.user, 'C', '3')
+    layoutWallet()
 
-    vi.useFakeTimers()
-    fireEvent.pointerDown(tile, { pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 })
-    act(() => {
-      vi.advanceTimersByTime(LONG_PRESS_MS)
-    })
-    fireEvent.pointerUp(tile, { pointerId: 1 })
-    fireEvent.click(tile)
-    vi.useRealTimers()
+    touchDrag('C', 2, 0)
 
-    expect(screen.getByRole('dialog', { name: 'Shop' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Close card' })).not.toBeInTheDocument()
+    expect(tileOrder()).toEqual(['C', 'A', 'B'])
+    // Neither the card nor its management menu opened.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByText('C moved to position 1 of 3.')).toBeInTheDocument()
+    await waitFor(async () => expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(['C', 'A', 'B']))
+    first.unmount()
+
+    // Restart: same database, new repository and app instance.
+    const second = renderApp()
+    await screen.findByRole('button', { name: 'C' })
+    expect(tileOrder()).toEqual(['C', 'A', 'B'])
+    // The saved order is also checkout's left/right sequence.
+    await second.user.click(screen.getByRole('button', { name: 'C' }))
+    await second.user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('dialog', { name: 'A' })).toBeInTheDocument()
   })
 
-  it('cancels a long press when the finger moves (scrolling)', async () => {
+  it('rearranges cards with a mouse drag without opening the card', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'A', '1')
+    await addManualCard(user, 'B', '2')
+    await addManualCard(user, 'C', '3')
+    layoutWallet()
+    const tile = screen.getByRole('button', { name: 'A' })
+
+    fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'mouse', isPrimary: true, button: 0, ...centre(0) })
+    fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'mouse', clientX: 60, clientY: 55 })
+    expect(tile.closest('li')).toHaveClass('tile--dragging')
+    fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'mouse', ...centre(1) })
+    expect(tileOrder()).toEqual(['B', 'A', 'C'])
+    fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'mouse', ...centre(1) })
+    fireEvent.click(tile)
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(tile.closest('li')).not.toHaveClass('tile--dragging')
+    await waitFor(async () => expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(['B', 'A', 'C']))
+  })
+
+  it('still opens the card on a short touch, a click that barely moves, Enter and Space', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Shop', '1')
-    const tile = screen.getByRole('button', { name: 'Shop' })
+    layoutWallet()
+    const close = async () => {
+      await user.click(screen.getByRole('button', { name: 'Close card' }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    }
 
-    vi.useFakeTimers()
-    fireEvent.pointerDown(tile, { pointerId: 1, isPrimary: true, button: 0, clientX: 10, clientY: 10 })
-    fireEvent.pointerMove(tile, { pointerId: 1, clientX: 10, clientY: 40 })
+    // Short touch: released before the long-press delay.
+    fakeLongPressTimer()
+    const tile = screen.getByRole('button', { name: 'Shop' })
+    fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, ...centre(0) })
+    act(() => {
+      vi.advanceTimersByTime(LONG_PRESS_MS / 2)
+    })
+    fireEvent.pointerUp(tile, { pointerId: 1, pointerType: 'touch', ...centre(0) })
+    fireEvent.click(tile)
+    vi.useRealTimers()
+    expect(screen.getByRole('dialog', { name: 'Shop' })).toBeInTheDocument()
+    await close()
+
+    // Mouse click with a few pixels of jitter (below the drag threshold).
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Shop' }), { pointerId: 2, pointerType: 'mouse', isPrimary: true, button: 0, ...centre(0) })
+    fireEvent.pointerMove(screen.getByRole('button', { name: 'Shop' }), { pointerId: 2, pointerType: 'mouse', clientX: 52, clientY: 52 })
+    fireEvent.pointerUp(screen.getByRole('button', { name: 'Shop' }), { pointerId: 2, pointerType: 'mouse', clientX: 52, clientY: 52 })
+    fireEvent.click(screen.getByRole('button', { name: 'Shop' }))
+    expect(screen.getByRole('dialog', { name: 'Shop' })).toBeInTheDocument()
+    await close()
+
+    screen.getByRole('button', { name: 'Shop' }).focus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('dialog', { name: 'Shop' })).toBeInTheDocument()
+    await close()
+
+    screen.getByRole('button', { name: 'Shop' }).focus()
+    await user.keyboard(' ')
+    expect(screen.getByRole('dialog', { name: 'Shop' })).toBeInTheDocument()
+  })
+
+  it('treats finger movement before the long-press delay as scrolling, not a drag', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'A', '1')
+    await addManualCard(user, 'B', '2')
+    layoutWallet()
+    const tile = screen.getByRole('button', { name: 'A' })
+
+    fakeLongPressTimer()
+    fireEvent.pointerDown(tile, { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0, ...centre(0) })
+    fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', clientX: 50, clientY: 80 })
     act(() => {
       vi.advanceTimersByTime(LONG_PRESS_MS * 2)
     })
     vi.useRealTimers()
+    fireEvent.pointerMove(tile, { pointerId: 1, pointerType: 'touch', ...centre(1) })
+    fireEvent.pointerCancel(tile, { pointerId: 1, pointerType: 'touch' })
+
+    expect(tile.closest('li')).not.toHaveClass('tile--dragging')
+    expect(tileOrder()).toEqual(['A', 'B'])
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('a long press without movement opens neither the menu nor the card', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'Shop', '1')
+    layoutWallet()
+    touchDrag('Shop', 0, 0)
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(tileOrder()).toEqual(['Shop'])
+    // The ⋯ button remains the way into the menu.
+    await user.click(screen.getByRole('button', { name: 'Options for Shop' }))
+    expect(screen.getByRole('dialog', { name: 'Shop' })).toBeInTheDocument()
+  })
+
+  it('reverts a drag that is cancelled by the browser or with Escape, saving nothing', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'A', '1')
+    await addManualCard(user, 'B', '2')
+    layoutWallet()
+    const tile = screen.getByRole('button', { name: 'A' })
+    const startDrag = (pointerId: number) => {
+      fireEvent.pointerDown(tile, { pointerId, pointerType: 'mouse', isPrimary: true, button: 0, ...centre(0) })
+      fireEvent.pointerMove(tile, { pointerId, pointerType: 'mouse', clientX: 60, clientY: 60 })
+      fireEvent.pointerMove(tile, { pointerId, pointerType: 'mouse', ...centre(1) })
+      expect(tileOrder()).toEqual(['B', 'A'])
+    }
+
+    startDrag(1)
+    fireEvent.pointerCancel(tile, { pointerId: 1, pointerType: 'mouse' })
+    expect(tileOrder()).toEqual(['A', 'B'])
+
+    startDrag(2)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(tileOrder()).toEqual(['A', 'B'])
+    fireEvent.pointerUp(tile, { pointerId: 2, pointerType: 'mouse', ...centre(1) })
+    fireEvent.click(tile)
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(['A', 'B'])
+  })
+
+  it('restores the previous order when saving a drag fails', async () => {
+    const real = makeRepository()
+    const failing: CardRepository = { ...real, reorder: vi.fn(async () => Promise.reject(new Error('Couldn’t save the new card order.'))) }
+    const { user } = renderApp(failing)
+    await addManualCard(user, 'A', '1')
+    await addManualCard(user, 'B', '2')
+    layoutWallet()
+
+    touchDrag('A', 0, 1)
+
+    await waitFor(() => expect(tileOrder()).toEqual(['A', 'B']))
+    expect(await screen.findByText('Couldn’t save the new card order.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('moves cards from the options menu with the keyboard and announces the new position', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'A', '1')
+    await addManualCard(user, 'B', '2')
+    await addManualCard(user, 'C', '3')
+
+    // Boundaries: the first card can't move earlier.
+    await user.click(screen.getByRole('button', { name: 'Options for A' }))
+    expect(screen.getByRole('group', { name: 'Position 1 of 3' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move to first' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move later' })).toBeEnabled()
+    await user.keyboard('{Escape}')
+
+    screen.getByRole('button', { name: 'Options for C' }).focus()
+    await user.keyboard('{Enter}')
+    screen.getByRole('button', { name: 'Move to first' }).focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(tileOrder()).toEqual(['C', 'A', 'B']))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('C moved to position 1 of 3.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'C' })).toHaveFocus())
+
+    await user.click(screen.getByRole('button', { name: 'Options for C' }))
+    await user.click(screen.getByRole('button', { name: 'Move later' }))
+    await waitFor(() => expect(tileOrder()).toEqual(['A', 'C', 'B']))
+    await user.click(screen.getByRole('button', { name: 'Options for A' }))
+    await user.click(screen.getByRole('button', { name: 'Move to last' }))
+    await waitFor(() => expect(tileOrder()).toEqual(['C', 'B', 'A']))
+    await user.click(screen.getByRole('button', { name: 'Options for B' }))
+    await user.click(screen.getByRole('button', { name: 'Move earlier' }))
+    await waitFor(() => expect(tileOrder()).toEqual(['B', 'C', 'A']))
+    expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(['B', 'C', 'A'])
+  })
+
+  it('keeps the menu open with a message when a keyboard move fails to save', async () => {
+    const real = makeRepository()
+    const failing: CardRepository = { ...real, reorder: vi.fn(async () => Promise.reject(new Error('Couldn’t save the new card order.'))) }
+    const { user } = renderApp(failing)
+    await addManualCard(user, 'A', '1')
+    await addManualCard(user, 'B', '2')
+
+    await user.click(screen.getByRole('button', { name: 'Options for B' }))
+    await user.click(screen.getByRole('button', { name: 'Move to first' }))
+
+    const menu = screen.getByRole('dialog', { name: 'B' })
+    expect(await within(menu).findByRole('alert')).toHaveTextContent('Couldn’t save the new card order.')
+    expect(tileOrder()).toEqual(['A', 'B'])
+    expect((await real.list()).map((card) => card.storeName)).toEqual(['A', 'B'])
   })
 
   it('renames and recolours a card from the keyboard-accessible options button', async () => {

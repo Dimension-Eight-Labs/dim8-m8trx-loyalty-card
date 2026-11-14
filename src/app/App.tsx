@@ -17,6 +17,12 @@
  * Accessibility: after an in-app screen change, the new screen's heading takes
  * focus (see ViewHeading); closing checkout returns focus to the tile that
  * opened it. While a dialog is open the rest of the app is `inert`.
+ *
+ * Ordering: `cards` from useCards is the user's saved wallet order, and it
+ * also defines checkout's left/right sequence. Reordering comes from a tile
+ * drag (WalletScreen) or the menu's move actions; both save the complete new
+ * order through `reorderCards` and announce the card's new position in the
+ * polite status region. A failed save leaves the previous order in place.
  */
 import { lazy, Suspense, useRef, useState } from 'react'
 import { AppHeader } from '../components/AppHeader.tsx'
@@ -29,6 +35,7 @@ import { colorForIndex } from '../features/cards/tileColors.ts'
 import { useCards } from '../features/cards/useCards.ts'
 import { CheckoutScreen } from '../features/checkout/CheckoutScreen.tsx'
 import { CardMenu } from '../features/wallet/CardMenu.tsx'
+import { movedOrder } from '../features/wallet/walletOrder.ts'
 import { WalletScreen } from '../features/wallet/WalletScreen.tsx'
 
 const AddCardFlow = lazy(() => import('../features/add/AddCardFlow.tsx').then((module) => ({ default: module.AddCardFlow })))
@@ -46,13 +53,39 @@ export interface AppProps {
 export const LOADING_MESSAGE = 'Loading your cards…'
 
 export function App({ repository, capture }: AppProps) {
-  const { status, cards, loadError, reload, createCard, updateCard, deleteCard } = useCards(repository)
+  const { status, cards, loadError, reload, createCard, updateCard, deleteCard, reorderCards } = useCards(repository)
   const [view, setView] = useState<View>({ name: 'wallet' })
   const [dialog, setDialog] = useState<DialogState>(null)
   // False until the first in-app navigation, so initial load does not move focus.
   const [hasNavigated, setHasNavigated] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const addButtonRef = useRef<HTMLButtonElement>(null)
+  // Asks a wallet tile to take focus again (after a keyboard move).
+  const [tileFocus, setTileFocus] = useState<{ cardId: string; seq: number } | undefined>(undefined)
+
+  /** Saves a new order and announces where `cardId` ended up. Resolves to an error message or null. */
+  const saveOrder = async (orderedIds: string[], cardId: string): Promise<string | null> => {
+    const result = await reorderCards(orderedIds)
+    if (!result.ok) {
+      setStatusMessage(result.message)
+      return result.message
+    }
+    const card = cards.find((item) => item.id === cardId)
+    const position = orderedIds.indexOf(cardId) + 1
+    setStatusMessage(card ? `${card.storeName} moved to position ${position} of ${orderedIds.length}.` : '')
+    return null
+  }
+
+  /** The dragged card is the one whose index changed the most; good enough for the announcement. */
+  const saveDraggedOrder = (orderedIds: string[]) => {
+    const current = cards.map((card) => card.id)
+    const moved =
+      orderedIds.reduce<{ id: string; distance: number } | null>((best, id, index) => {
+        const distance = Math.abs(index - current.indexOf(id))
+        return !best || distance > best.distance ? { id, distance } : best
+      }, null)?.id ?? orderedIds[0] ?? ''
+    return saveOrder(orderedIds, moved)
+  }
 
   const navigate = (next: View, message = '') => {
     setHasNavigated(true)
@@ -134,6 +167,8 @@ export function App({ repository, capture }: AppProps) {
         focusCardId={view.name === 'wallet' ? view.focusCardId : undefined}
         onOpenCard={(cardId) => navigate({ name: 'checkout', cardId })}
         onOpenMenu={(cardId) => setDialog({ name: 'menu', cardId })}
+        onReorder={saveDraggedOrder}
+        focusRequest={tileFocus}
       />
     )
   }
@@ -172,7 +207,19 @@ export function App({ repository, capture }: AppProps) {
       {showDialog && dialog.name === 'menu' && (
         <CardMenu
           card={dialogCard}
+          position={cards.indexOf(dialogCard)}
+          count={cards.length}
           onClose={() => setDialog(null)}
+          onMove={async (target) => {
+            const orderedIds = movedOrder(cards.map((card) => card.id), dialogCard.id, target)
+            const message = await saveOrder(orderedIds, dialogCard.id)
+            if (message) return message
+            setDialog(null)
+            // Focus the moved card itself (not the ⋯ button the menu would
+            // restore), so keyboard users keep their place.
+            setTileFocus((previous) => ({ cardId: dialogCard.id, seq: (previous?.seq ?? 0) + 1 }))
+            return null
+          }}
           onDelete={() => setDialog({ name: 'delete', cardId: dialogCard.id })}
           onRename={async (storeName) => {
             const result = await updateCard(dialogCard.id, { storeName })
