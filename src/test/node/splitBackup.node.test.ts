@@ -4,7 +4,9 @@
  * oversized backups (README: "Advanced: Working With Oversized M8TRX
  * Backups"). Runs the real script with `python3` on synthetic backups (no
  * personal data) in temporary directories, then passes every part through
- * the app's own parseBackup() and planRestore().
+ * the app's own parseBackup() and planRestore(). Malformed inputs are
+ * checked against both: whatever parseBackup() rejects, the script must
+ * reject too, before writing any file.
  *
  * Host test in Node; requires python3 on PATH.
  */
@@ -14,7 +16,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BACKUP_LIMITS, createBackup, parseBackup, planRestore } from '../../features/backup/backupFormat.ts'
+import { BARCODE_FORMATS, FORMAT_SPECS } from '../../features/barcodes/formats.ts'
 import type { CardBarcode, LoyaltyCard } from '../../features/cards/card.ts'
+import { TILE_COLORS } from '../../features/cards/tileColors.ts'
 
 const SCRIPT = join(import.meta.dirname, '../../../scripts/split-m8trx-backup.py')
 const MIB = 1024 * 1024
@@ -64,6 +68,20 @@ describe('split-m8trx-backup.py', () => {
   it('uses exactly the app’s standard restore limits', () => {
     const printed = JSON.parse(execFileSync('python3', ['-I', SCRIPT, '--print-limits'], { encoding: 'utf-8' }))
     expect(printed).toEqual({ ...BACKUP_LIMITS })
+  })
+
+  it('uses exactly the app’s tile colours and barcode formats', () => {
+    const probe = [
+      'import importlib.util, json, sys',
+      'spec = importlib.util.spec_from_file_location("splitter", sys.argv[1])',
+      'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
+      'print(json.dumps({"colors": sorted(m.TILE_COLOR_IDS), "formats": sorted([*m.GS1_FORMATS, *m.FREE_FORM_FORMATS]),',
+      '  "max": {f: n for f, (_, n) in m.FREE_FORM_FORMATS.items()} | {f: n for f, n in m.GS1_FORMATS.items()}}))',
+    ].join('\n')
+    const printed = JSON.parse(execFileSync('python3', ['-I', '-c', probe, SCRIPT], { encoding: 'utf-8' }))
+    expect(printed.colors).toEqual(TILE_COLORS.map((c) => c.id).sort())
+    expect(printed.formats).toEqual([...BARCODE_FORMATS].sort())
+    expect(printed.max).toEqual(Object.fromEntries(BARCODE_FORMATS.map((f) => [f, FORMAT_SPECS[f].maxLength])))
   })
 
   it('splits an oversized backup into restorable parts with unmodified cards, in wallet order', async () => {

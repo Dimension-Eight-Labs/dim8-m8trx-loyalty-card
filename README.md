@@ -979,15 +979,23 @@ documents. Each part must:
 - be independently parseable and importable.
 
 `scripts/split-m8trx-backup.py` does exactly this with Python 3's standard
-library. It validates the input as M8TRX's restore does, keeps the wallet
-order (part 1 holds the first cards, part 2 the next, …), fills each part
-as far as the limits allow, re-validates every part before writing any,
-never overwrites existing files, and stops without writing anything if a
-single card could never be restored (for example an image over 4 MiB).
-Barcode check digits, names and colours are copied unchanged and checked by
-M8TRX itself during import. The script is covered by
-`src/test/node/splitBackup.node.test.ts`, which feeds every part it writes
-through the app's own restore parser.
+library. It validates the input against the same rules as M8TRX's restore
+(store names, tile colours, barcode formats and values including EAN/UPC
+check digits, timestamps, field lengths, image data) and also requires
+well-formed `exportedAt` and `app` metadata, which it copies into every part.
+It keeps the wallet order (part 1 holds the first cards, part 2 the next, …),
+fills each part as far as the limits allow, re-validates every part before
+writing any, and never overwrites existing files. If the backup is invalid,
+or a single card could never be restored (for example an image over 4 MiB),
+it stops without writing anything; if writing fails part-way (for example a
+full disk), it removes the parts it had already written. The script is
+deliberately a little stricter than the app (it accepts only standard ISO
+8601 timestamps such as `2026-11-14T18:00:00.000Z`, which M8TRX always
+writes), so it may refuse a hand-edited file, but it never writes a part the
+app would reject. It is covered by `src/test/node/splitBackup.node.test.ts`,
+which feeds every part it writes through the app's own restore parser and
+checks that each malformed backup the app rejects is rejected by the script
+too.
 
 ```sh
 python3 scripts/split-m8trx-backup.py m8trx-backup-2026-11-14.m8trx
