@@ -19,14 +19,21 @@ Cards keep their wallet order: part 1 holds the first cards in the original
 `order`, part 2 the next ones, and so on. Restoring the parts in numeric
 order therefore rebuilds the original order after any existing cards.
 
-Validation: the input is checked as M8TRX's restore checks it (format and
-version, unique IDs, an `order` naming every card once, field lengths, strict
-base64 whose decoded length matches `byteLength`, image signatures). Barcode
-check digits, store names and colours are copied as-is and checked by M8TRX
-itself during import. If a single card can never fit a part (for example an
-image over 4 MiB), the tool stops without writing anything. Every part is
-re-validated before any file is written, and existing files are never
-overwritten.
+Validation: the input is checked against the same rules as M8TRX's restore
+parser (parseBackup in src/features/backup/backupFormat.ts and the card and
+barcode rules it calls): format and version, `exportedAt` and `app` metadata,
+unique IDs, an `order` naming every card once, store names, tile colours,
+timestamps, generated-barcode formats and values (including EAN/UPC check
+digits), field lengths, strict base64 whose decoded length matches
+`byteLength`, and image signatures. Where the app's rule depends on the
+browser (Date.parse) or the app accepts something it never writes (a backup
+without `exportedAt`/`app`), this tool is deliberately stricter, so it can
+refuse a hand-edited file but never write a part that M8TRX rejects. If any
+card is invalid, or a single card can never fit a part (for example an image
+over 4 MiB), the tool stops without writing anything. Every part is
+re-validated before any file is written, existing files are never
+overwritten, and if writing fails part-way the parts already written by this
+run are removed.
 
 Requirements: Python 3.9+ standard library only.
 
@@ -46,6 +53,7 @@ output conflict, 2 for usage errors.
 import argparse
 import base64
 import binascii
+import datetime
 import json
 import math
 import os
@@ -80,8 +88,52 @@ IMAGE_SIGNATURES = {
     "image/webp": b"RIFF",  # plus "WEBP" at offset 8
     "image/gif": b"GIF8",
 }
-BASE64_RE = re.compile(r"^[A-Za-z0-9+/]*={0,2}$")
+# Patterns are always applied with fullmatch(): in Python, `$` also matches
+# before a trailing newline, unlike JavaScript's `$`.
+BASE64_RE = re.compile(r"[A-Za-z0-9+/]*={0,2}")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+# Tile colour palette ids (TILE_COLORS in src/features/cards/tileColors.ts).
+TILE_COLOR_IDS = frozenset(
+    ["red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink", "brown", "slate", "white"]
+)
+
+# Characters JavaScript's String.prototype.trim() removes (WhiteSpace and
+# LineTerminator in ECMAScript). Python's str.strip() uses a different set
+# (it keeps U+FEFF and strips U+001C..U+001F and U+0085), so store names are
+# trimmed with exactly this set to match validateStoreName in card.ts.
+JS_TRIM_CHARS = (
+    "\t\n\v\f\r          "
+    "        　﻿"
+)
+
+# Generated-barcode rules (FORMAT_SPECS in src/features/barcodes/formats.ts):
+# format -> (character pattern or None, maximum length) for free-form formats,
+# or -> GS1 digit count for check-digit formats. Lengths are UTF-16 units.
+_DIGITS_RE = re.compile(r"[0-9]+")
+_ASCII_RE = re.compile(r"[\x00-\x7f]+")
+_CODE39_RE = re.compile(r"[0-9A-Z \-.$/+%]+")
+FREE_FORM_FORMATS = {
+    "code128": (_ASCII_RE, 80),
+    "code39": (_CODE39_RE, 60),
+    "qrcode": (None, 1000),
+    "pdf417": (None, 500),
+    "datamatrix": (None, 500),
+    "azteccode": (None, 500),
+}
+GS1_FORMATS = {"ean13": 13, "upca": 12, "ean8": 8}
+
+# Timestamps: the app requires Date.parse() to succeed, which depends on the
+# browser. This tool accepts only the ECMAScript Date Time String Format
+# (what M8TRX writes via toISOString, e.g. 2026-11-14T18:00:00.000Z), with a
+# real calendar date and time, which every conforming engine parses: a date
+# (YYYY, YYYY-MM or YYYY-MM-DD), or a full date followed by THH:mm[:ss[.sss]]
+# and an optional Z or +HH:mm / -HH:mm offset.
+TIMESTAMP_RE = re.compile(
+    r"(?P<year>[0-9]{4})(?:-(?P<month>[0-9]{2})(?:-(?P<day>[0-9]{2})"
+    r"(?:T(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2})(?::(?P<second>[0-9]{2})(?:\.[0-9]{3})?)?"
+    r"(?:Z|[+-](?P<zh>[0-9]{2}):(?P<zm>[0-9]{2}))?)?)?)?"
+)
 
 
 class BackupError(Exception):
@@ -118,9 +170,77 @@ def _bounded(value, max_length):
     return isinstance(value, str) and _js_length(value) <= max_length
 
 
+def _is_int(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _is_timestamp(value):
-    # The app requires Date.parse() to succeed; M8TRX writes ISO 8601.
-    return _bounded(value, LIMITS["timestampLength"]) and value != "" and re.match(r"^\d{4}-\d{2}-\d{2}", value) is not None
+    """A timestamp parseBackup accepts on any engine (see TIMESTAMP_RE)."""
+    if not _bounded(value, LIMITS["timestampLength"]):
+        return False
+    match = TIMESTAMP_RE.fullmatch(value)
+    if match is None:
+        return False
+    fields = match.groupdict()
+    try:
+        datetime.date(int(fields["year"]), int(fields["month"] or 1), int(fields["day"] or 1))
+    except ValueError:
+        return False
+    if fields["hour"] is not None:
+        if int(fields["hour"]) > 23 or int(fields["minute"]) > 59 or int(fields["second"] or 0) > 59:
+            return False
+    if fields["zh"] is not None and (int(fields["zh"]) > 23 or int(fields["zm"]) > 59):
+        return False
+    return True
+
+
+def _js_trim(value):
+    return value.strip(JS_TRIM_CHARS)
+
+
+def _gs1_check_digit(body):
+    """GS1 mod-10 check digit (gs1CheckDigit in formats.ts); `body` excludes it."""
+    total = 0
+    for i, char in enumerate(reversed(body)):
+        total += int(char) * (3 if i % 2 == 0 else 1)
+    return (10 - total % 10) % 10
+
+
+def _barcode_value_error(barcode_format, value):
+    """Mirrors validateBarcodeValue in formats.ts; None when the value is acceptable."""
+    if value == "":
+        return "is empty"
+    if barcode_format in GS1_FORMATS:
+        digits = GS1_FORMATS[barcode_format]
+        if not _DIGITS_RE.fullmatch(value) or len(value) != digits:
+            return f"must be exactly {digits} digits"
+        if int(value[-1]) != _gs1_check_digit(value[:-1]):
+            return "has a wrong check digit"
+        return None
+    pattern, max_length = FREE_FORM_FORMATS[barcode_format]
+    if pattern is not None and not pattern.fullmatch(value):
+        return f"contains characters {barcode_format} cannot encode"
+    if _js_length(value) > max_length:
+        return f"is longer than {max_length} characters"
+    return None
+
+
+def validate_metadata(doc):
+    """
+    `exportedAt` and `app`, which every part copies from the original. M8TRX
+    always writes both; its parser treats them as informational, but this
+    tool requires them to be well formed so it never copies damaged metadata
+    into the parts.
+    """
+    if not _is_timestamp(doc.get("exportedAt")):
+        raise BackupError("backup has a missing or invalid exportedAt timestamp")
+    app = doc.get("app")
+    if not isinstance(app, dict):
+        raise BackupError("backup has missing or invalid app metadata")
+    for key in ("name", "version"):
+        value = app.get(key)
+        if not isinstance(value, str) or value == "" or CONTROL_RE.search(value):
+            raise BackupError(f"backup has an invalid app.{key}")
 
 
 def validate_card(card, index):
@@ -128,17 +248,20 @@ def validate_card(card, index):
     where = f"card #{index + 1}"
     if not isinstance(card, dict):
         raise BackupError(f"{where} is not an object")
-    if card.get("schemaVersion") != CARD_SCHEMA_VERSION or isinstance(card.get("schemaVersion"), bool):
+    schema_version = card.get("schemaVersion")
+    if not isinstance(schema_version, (int, float)) or isinstance(schema_version, bool) or schema_version != CARD_SCHEMA_VERSION:
         raise BackupError(f"{where} has an unsupported schemaVersion")
     card_id = card.get("id")
     if not _bounded(card_id, LIMITS["idLength"]) or card_id == "" or CONTROL_RE.search(card_id):
         raise BackupError(f"{where} has an invalid or too-long id")
     where = f"card {card_id!r}"
+    # validateStoreName: non-empty and at most 80 characters after JS trim().
     name = card.get("storeName")
-    if not isinstance(name, str) or name.strip() == "" or _js_length(name.strip()) > STORE_NAME_LENGTH:
+    if not isinstance(name, str) or _js_trim(name) == "" or _js_length(_js_trim(name)) > STORE_NAME_LENGTH:
         raise BackupError(f"{where} has an invalid storeName")
-    if not isinstance(card.get("color"), str):
-        raise BackupError(f"{where} has an invalid color")
+    color = card.get("color")
+    if not isinstance(color, str) or color not in TILE_COLOR_IDS:
+        raise BackupError(f"{where} has an invalid tile color {color!r}")
     if "notes" in card and not _bounded(card["notes"], LIMITS["notesLength"]):
         raise BackupError(f"{where} has notes longer than {LIMITS['notesLength']} characters")
     if not _is_timestamp(card.get("createdAt")) or not _is_timestamp(card.get("updatedAt")):
@@ -148,27 +271,35 @@ def validate_card(card, index):
     if not isinstance(barcode, dict):
         raise BackupError(f"{where} has no barcode")
     kind = barcode.get("kind")
-    if kind in ("generated", "text"):
+    if kind == "text":
         value = barcode.get("value")
-        if not _bounded(value, LIMITS["valueLength"]) or (kind == "text" and value == ""):
+        if not _bounded(value, LIMITS["valueLength"]) or value == "":
             raise BackupError(f"{where} has an invalid barcode value")
-        if kind == "generated" and not isinstance(barcode.get("format"), str):
-            raise BackupError(f"{where} has an invalid barcode format")
+        return 0
+    if kind == "generated":
+        barcode_format, value = barcode.get("format"), barcode.get("value")
+        if not isinstance(barcode_format, str) or (barcode_format not in GS1_FORMATS and barcode_format not in FREE_FORM_FORMATS):
+            raise BackupError(f"{where} has an unsupported barcode format {barcode_format!r}")
+        if not _bounded(value, LIMITS["valueLength"]):
+            raise BackupError(f"{where} has an invalid barcode value")
+        problem = _barcode_value_error(barcode_format, value)
+        if problem is not None:
+            raise BackupError(f"{where} has an invalid {barcode_format} barcode value: it {problem}")
         return 0
     if kind != "image":
         raise BackupError(f"{where} has an unknown barcode kind")
 
     mime, length, data = barcode.get("mimeType"), barcode.get("byteLength"), barcode.get("data")
-    if mime not in IMAGE_SIGNATURES:
+    if not isinstance(mime, str) or mime not in IMAGE_SIGNATURES:
         raise BackupError(f"{where} has an unsupported image type")
-    if not isinstance(length, int) or isinstance(length, bool) or length <= 0:
+    if not _is_int(length) or length <= 0:
         raise BackupError(f"{where} has an invalid image byteLength")
     if length > LIMITS["imageBytes"]:
         raise BackupError(
             f"{where} has a {length}-byte image, over the {LIMITS['imageBytes']}-byte per-image limit; "
             "no part containing it could be restored"
         )
-    if not isinstance(data, str) or len(data) != math.ceil(length / 3) * 4 or not BASE64_RE.match(data):
+    if not isinstance(data, str) or len(data) != math.ceil(length / 3) * 4 or not BASE64_RE.fullmatch(data):
         raise BackupError(f"{where} has malformed image data")
     try:
         raw = base64.b64decode(data, validate=True)
@@ -194,10 +325,11 @@ def validate_backup(doc, limits=None):
     if not isinstance(doc, dict) or doc.get("format") != FORMAT_ID:
         raise BackupError("not an M8TRX backup")
     version = doc.get("version")
-    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+    if not _is_int(version) or version < 1:
         raise BackupError("invalid backup version")
     if version > FORMAT_VERSION:
         raise BackupError(f"backup version {version} is newer than this tool supports ({FORMAT_VERSION})")
+    validate_metadata(doc)
     cards, order = doc.get("cards"), doc.get("order")
     if not isinstance(cards, list) or not isinstance(order, list):
         raise BackupError("backup has no cards/order arrays")
@@ -250,7 +382,8 @@ def _loads(text):
 def split(doc, limits):
     """Returns the part documents. Greedy, in wallet order: each part is as full as the limits allow."""
     ordered = validate_backup(doc)
-    header = {key: doc[key] for key in ("format", "version", "exportedAt", "app") if key in doc}
+    # Metadata is copied unchanged (validate_backup has required all four keys).
+    header = {key: doc[key] for key in ("format", "version", "exportedAt", "app")}
     empty_size = _encoded_size({**header, "order": [], "cards": []})
 
     parts, current = [], []
@@ -321,9 +454,20 @@ def run(input_path, output_dir, limits):
     if existing:
         raise BackupError(f"refusing to overwrite existing file(s): {', '.join(existing)}")
     os.makedirs(output_dir, exist_ok=True)
-    for path, data in zip(paths, encoded):
-        with open(path, "xb") as handle:  # "x": never overwrite
-            handle.write(data)
+    written = []
+    try:
+        for path, data in zip(paths, encoded):
+            with open(path, "xb") as handle:  # "x": never overwrite
+                written.append(path)  # created by this run, so ours to remove
+                handle.write(data)
+    except OSError:
+        # Never leave an incomplete set of parts behind (e.g. disk full).
+        for path in written:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        raise
     return paths, parts
 
 

@@ -178,6 +178,163 @@ describe('split-m8trx-backup.py', () => {
     }
   })
 
+  describe('validation matches the app’s restore parser', () => {
+    type Mutable = Record<string, unknown>
+    /** A valid two-card backup, as plain JSON, to derive malformed variants from. */
+    async function baseDoc() {
+      return JSON.parse(
+        await createBackup(
+          [card('g', 'Sample Store', { kind: 'generated', format: 'ean13', value: '4006381333931' }), card('t', 'Text Store', { kind: 'text', value: 'TXT 1' })],
+          meta,
+        ),
+      ) as Doc
+    }
+    /** The base backup with `edit` applied to a copy of its first card (or to the document). */
+    async function variant(edit: { card?: (c: Mutable) => void; doc?: (d: Mutable) => void }): Promise<string> {
+      const doc = (await baseDoc()) as unknown as Mutable & { cards: Mutable[] }
+      const first = structuredClone(doc.cards[0]!)
+      edit.card?.(first)
+      doc.cards[0] = first
+      edit.doc?.(doc)
+      return JSON.stringify(doc)
+    }
+    const setBarcode = (barcode: Mutable) => (c: Mutable) => {
+      c.barcode = barcode
+    }
+    const generated = (format: unknown, value: unknown) => setBarcode({ kind: 'generated', format, value })
+
+    function expectRejected(text: string, message: RegExp, label: string) {
+      const result = runSplit(writeBackup(text, 'bad.m8trx'))
+      expect(result.status, label).toBe(1)
+      expect(result.stderr, label).toMatch(message)
+      expect(result.stderr, label).not.toMatch(/Traceback/)
+      expect(parts(), label).toEqual([])
+    }
+
+    // Each case is rejected by parseBackup() AND by the script, which writes nothing.
+    const sharedRejections: Array<[string, Parameters<typeof variant>[0], RegExp]> = [
+      ['unknown tile colour', { card: (c) => void (c.color = 'chartreuse') }, /tile color/],
+      ['missing tile colour', { card: (c) => void delete c.color }, /tile color/],
+      ['non-string tile colour', { card: (c) => void (c.color = 3) }, /tile color/],
+      ['unknown barcode format', { card: generated('made-up', '123') }, /unsupported barcode format/],
+      ['missing barcode format', { card: generated(undefined, '123') }, /unsupported barcode format/],
+      ['EAN-13 wrong check digit', { card: generated('ean13', '4006381333932') }, /check digit/],
+      ['EAN-13 wrong length', { card: generated('ean13', '400638133393') }, /13 digits/],
+      ['EAN-13 non-digit', { card: generated('ean13', '40063813339a') }, /13 digits/],
+      ['UPC-A wrong check digit', { card: generated('upca', '036000291453') }, /check digit/],
+      ['EAN-8 wrong check digit', { card: generated('ean8', '96385075') }, /check digit/],
+      ['EAN-8 trailing newline', { card: generated('ean8', '9638507\n') }, /8 digits/],
+      ['Code 39 lower case', { card: generated('code39', 'abc') }, /cannot encode/],
+      ['Code 128 non-ASCII', { card: generated('code128', 'café') }, /cannot encode/],
+      ['Code 128 too long', { card: generated('code128', 'A'.repeat(81)) }, /longer than 80/],
+      ['QR code too long', { card: generated('qrcode', 'q'.repeat(1001)) }, /longer than 1000/],
+      ['PDF417 too long', { card: generated('pdf417', 'p'.repeat(501)) }, /longer than 500/],
+      ['empty generated value', { card: generated('qrcode', '') }, /empty/],
+      ['non-string generated value', { card: generated('qrcode', 5) }, /barcode value/],
+      ['empty text value', { card: setBarcode({ kind: 'text', value: '' }) }, /barcode value/],
+      ['non-string image type', { card: setBarcode({ kind: 'image', mimeType: ['image/png'], byteLength: 1, data: 'AA==' }) }, /image type/],
+      ['unparseable createdAt', { card: (c) => void (c.createdAt = 'not a date') }, /timestamp/],
+      ['impossible month in updatedAt', { card: (c) => void (c.updatedAt = '2026-13-01T00:00:00.000Z') }, /timestamp/],
+      ['empty createdAt', { card: (c) => void (c.createdAt = '') }, /timestamp/],
+      ['missing updatedAt', { card: (c) => void delete c.updatedAt }, /timestamp/],
+      ['numeric createdAt', { card: (c) => void (c.createdAt = 1_772_359_200_000) }, /timestamp/],
+      ['over-long createdAt', { card: (c) => void (c.createdAt = `2026-03-01T10:00:00.000Z${' '.repeat(41)}`) }, /timestamp/],
+      ['store name blank after JS trim (U+FEFF)', { card: (c) => void (c.storeName = '﻿ ') }, /storeName/],
+      ['store name too long', { card: (c) => void (c.storeName = 'S'.repeat(81)) }, /storeName/],
+      ['unsupported schemaVersion', { card: (c) => void (c.schemaVersion = 3) }, /schemaVersion/],
+      ['boolean schemaVersion', { card: (c) => void (c.schemaVersion = true) }, /schemaVersion/],
+    ]
+    it.each(sharedRejections)('rejects %s, as the app does, and writes nothing', async (label, edit, message) => {
+      const text = await variant(edit)
+      expect(() => parseBackup(text), label).toThrow()
+      expectRejected(text, message, label)
+    })
+
+    // The app's parser does not check these (metadata is informational; Date.parse
+    // is lenient in V8), but the script copies metadata into every part and must
+    // not depend on one browser's parsing, so it is deliberately stricter.
+    const stricterRejections: Array<[string, Parameters<typeof variant>[0], RegExp]> = [
+      ['missing exportedAt', { doc: (d) => void delete d.exportedAt }, /exportedAt/],
+      ['invalid exportedAt', { doc: (d) => void (d.exportedAt = 'yesterday') }, /exportedAt/],
+      ['numeric exportedAt', { doc: (d) => void (d.exportedAt = 0) }, /exportedAt/],
+      ['missing app metadata', { doc: (d) => void delete d.app }, /app metadata/],
+      ['non-object app metadata', { doc: (d) => void (d.app = 'M8TRX') }, /app metadata/],
+      ['empty app.name', { doc: (d) => void (d.app = { name: '', version: '0.5.0' }) }, /app\.name/],
+      ['non-string app.version', { doc: (d) => void (d.app = { name: 'M8TRX', version: 5 }) }, /app\.version/],
+      ['calendar-invalid date (Feb 30)', { card: (c) => void (c.createdAt = '2026-02-30T00:00:00.000Z') }, /timestamp/],
+      ['non-ISO date form', { card: (c) => void (c.createdAt = '2026-03-01 10:00:00') }, /timestamp/],
+    ]
+    it.each(stricterRejections)('rejects %s (stricter than the app) and writes nothing', async (label, edit, message) => {
+      expectRejected(await variant(edit), message, label)
+    })
+
+    it('accepts every tile colour, barcode format and ISO timestamp form, and the app restores every part', async () => {
+      const colors = ['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'white']
+      const barcodes: CardBarcode[] = [
+        { kind: 'generated', format: 'code128', value: ' Sample 0001 !~ ' },
+        { kind: 'generated', format: 'code39', value: 'ABC-123 $/+%.' },
+        { kind: 'generated', format: 'ean13', value: '4006381333931' },
+        { kind: 'generated', format: 'upca', value: '036000291452' },
+        { kind: 'generated', format: 'ean8', value: '96385074' },
+        { kind: 'generated', format: 'qrcode', value: `https://example.com/ü?${'q'.repeat(970)}` },
+        { kind: 'generated', format: 'pdf417', value: 'P'.repeat(500) },
+        { kind: 'generated', format: 'datamatrix', value: 'SAMPLE DM' },
+        { kind: 'generated', format: 'azteccode', value: 'SAMPLE AZ' },
+        { kind: 'text', value: '  0000 1111  ' },
+        { kind: 'image', image: image(1, 300) },
+      ]
+      const timestamps = ['2026', '2026-03', '2026-03-01', '2026-03-01T10:00', '2026-03-01T10:00:59Z', '2026-03-01T10:00:00+05:30', '2026-12-31T23:59:59.999-08:00', '2024-02-29T00:00:00.000Z']
+      const wallet = barcodes.map((barcode, i) =>
+        card(`v${i}`, i === 0 ? `  Padded ${'N'.repeat(70)}  ` : `Store ${i}`, barcode, {
+          color: colors[i % colors.length]!,
+          createdAt: timestamps[i % timestamps.length]!,
+          updatedAt: timestamps[(i + 3) % timestamps.length]!,
+        }),
+      )
+      wallet.push(card('last', 'White tile', { kind: 'text', value: 'W' }, { color: 'white' }))
+      const text = await createBackup(wallet, meta)
+      expect(parseBackup(text)).toHaveLength(wallet.length) // the app accepts the input
+
+      const result = runSplit(writeBackup(text), '--max-cards', '5')
+      expect(result.stderr).toBe('')
+      expect(result.status).toBe(0)
+      const original = JSON.parse(text) as Doc
+      const byId = new Map(original.cards.map((c) => [c.id, c]))
+      const restored: string[] = []
+      for (const name of parts()) {
+        const partText = readPart(name)
+        const part = JSON.parse(partText) as Doc
+        for (const record of part.cards) expect(record).toEqual(byId.get(record.id))
+        restored.push(...parseBackup(partText).map((c) => c.id))
+      }
+      expect(restored).toEqual(original.order)
+    })
+
+    it('removes the parts it already wrote if writing a later part fails', async () => {
+      const input = writeBackup(await createBackup([card('a', 'A', { kind: 'text', value: '1' }), card('b', 'B', { kind: 'text', value: '2' })], meta))
+      // Load the script as a module and make the second part's write fail (as a full disk would).
+      const probe = [
+        'import builtins, importlib.util, os, sys',
+        'spec = importlib.util.spec_from_file_location("splitter", sys.argv[1])',
+        'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
+        'real_open = builtins.open; count = [0]',
+        'def failing_open(path, mode="r", *a, **k):',
+        '    if mode == "xb":',
+        '        count[0] += 1',
+        '        if count[0] == 2: raise OSError(28, "No space left on device")',
+        '    return real_open(path, mode, *a, **k)',
+        'builtins.open = failing_open',
+        'limits = dict(m.LIMITS); limits["cards"] = 1',
+        'try:',
+        '    m.run(sys.argv[2], sys.argv[3], limits); print("no error")',
+        'except OSError as e: print("failed:", e.strerror)',
+      ].join('\n')
+      const out = execFileSync('python3', ['-I', '-c', probe, SCRIPT, input, dir], { encoding: 'utf-8' })
+      expect(out.trim()).toBe('failed: No space left on device')
+      expect(parts()).toEqual([])
+    })
+  })
+
   it('refuses a card that could never be restored (image over the 4 MiB per-image limit)', () => {
     const bytes = Buffer.alloc(4 * MIB + 1, 7)
     Buffer.from(PNG).copy(bytes)
