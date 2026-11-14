@@ -4,6 +4,11 @@
 Web App (PWA) for storing and displaying loyalty and membership cards.
 Developed by Dimension Eight Labs LLC (<https://dim8labs.com>).
 
+Source code and documentation:
+<https://github.com/Dimension-Eight-Labs/dim8-m8trx-loyalty-card>.
+M8TRX is free software, licensed under the **GNU General Public License,
+version 3 or later** (`GPL-3.0-or-later`); see [License](#license).
+
 The product does one job on purpose. It has **no accounts, advertisements,
 analytics, cloud backend, or synchronization**, and it loads nothing from
 third-party hosts.
@@ -85,7 +90,10 @@ Development version; not published or deployed.
   over the dark background. Both files are precached for offline use.
 - **About** (Add Card → About): logo, M8TRX, "by DIM8 Labs", the version
   (from `package.json` via Vite's `define`, `src/app/appMetadata.ts`), a
-  link to <https://dim8labs.com>, the product description and
+  link to <https://dim8labs.com>, a separate **Source Code & Documentation**
+  link to the official repository
+  (<https://github.com/Dimension-Eight-Labs/dim8-m8trx-loyalty-card>), the
+  product description and
   "© 2026 Dimension Eight Labs LLC. All rights reserved." The Add Card
   screen ends with "© 2026 Dimension Eight Labs LLC".
 - **PWA identity**: new icons (dark DIM8 background, decorative VFD barcode
@@ -96,10 +104,22 @@ Development version; not published or deployed.
 - **Backup and restore** — see [Backup format and restore policy](#backup-format-and-restore-policy).
 - No IndexedDB schema change (still `dim8-loyalty-card` version 3); no new
   dependencies. The repository interface gained one method, `importCards`.
+- **Release preparation** (still v0.5.0): standard restore raised from
+  40 MiB to **60 MiB** of decoded images (file limit 64 → 96 MiB, measured
+  in UTF-8 bytes); oversized exports stay available behind an explicit
+  **Backup Exceeds Restore Limit** warning; the
+  [advanced recovery guide](#advanced-working-with-oversized-m8trx-backups)
+  and `scripts/split-m8trx-backup.py`; the About repository link; GPL-3.0-or-later
+  licensing (`LICENSE`, `THIRD_PARTY_NOTICES.md`). Backup format version
+  stays 1 (files from earlier v0.5.0 builds restore unchanged) and the
+  database stays version 3.
 
 Checked in headless desktop Firefox at 390×844 (wallet, Add Card, About,
-linear and QR checkout, via a temporary harness). **Not yet checked on an
-iPhone** — see the v0.5.0 checklist below.
+linear and QR checkout, via a temporary harness). DIM8 reports that the
+v0.5.0 functionality, visual design, branding and normal-browser
+backup/restore were tested successfully on a physical iPhone (owner-reported
+result). The 60 MiB restore limit, oversized-export warning and GitHub links
+added afterwards have host tests only and still need an on-device check.
 
 ### Backup format and restore policy
 
@@ -143,16 +163,45 @@ Files* → iCloud Drive, AirDrop, …) where the Web Share API accepts files, or
 downloads it otherwise. Two taps, because iOS only allows sharing from a
 direct tap and building the file is asynchronous. Nothing is uploaded.
 
+**Export is never limited.** Every card and every stored image byte is
+always written; nothing is truncated, omitted or recompressed. If the file
+would exceed any standard restore limit (below), a **Backup Exceeds Restore
+Limit** warning appears first, naming the limit exceeded, linking to
+[Advanced: Working With Oversized M8TRX Backups](#advanced-working-with-oversized-m8trx-backups),
+and offering **Cancel** (no file is offered for saving) or **Continue
+Export** (the usual Save backup step, with the complete file). Neither
+choice changes the stored cards. A browser can still fail to build a very
+large file; when the engine reports that a string is too long, the app says
+"This browser couldn’t create a backup file this large" — it never claims
+that an export of any size will succeed.
+
+**Standard restore limits** (`BACKUP_LIMITS` in `backupFormat.ts`, the
+single source for both restore and the export warning). Three different
+sizes are involved:
+
+| Limit | Value | Measured as |
+| ----- | ----- | ----------- |
+| Images in total | **60 MiB** (62,914,560 bytes) | decoded image bytes (each image's `byteLength`) |
+| One image | 4 MiB | decoded image bytes (the wallet's own per-card cap) |
+| Cards | 1000 | cards in the file |
+| Whole file | 96 MiB | UTF-8 bytes of the complete JSON document |
+| Text fields | ID 128, notes 10,000, barcode value 4096, detected code 4096 characters | per card |
+
+Base64 makes each image 4/3 larger in the file, so 60 MiB of images is
+80 MiB of base64. The 96 MiB file limit adds 16 MiB for card text and JSON
+structure, so a backup within the image budget is never refused merely
+because its file is larger than 60 MiB.
+
 **Restore** opens the file picker (no `accept` filter, because iOS greys out
 unknown extensions such as `.m8trx`), then, before anything is written:
 
-1. checks the file size (≤ 64 MiB) before reading it;
+1. checks the file size (≤ 96 MiB, UTF-8) before reading it;
 2. validates the whole document: format id, version (newer versions are
    refused with an "update the app" message), every field, colours,
    barcode values (including check digits), timestamps, image type, strict
    base64, declared vs decoded size, and a file signature that must agree
-   with the declared type; ≤ 1000 cards, ≤ 4 MiB per image and ≤ 40 MiB of
-   images in total (declared sizes are checked before decoding);
+   with the declared type; ≤ 1000 cards, ≤ 4 MiB per image and ≤ 60 MiB of
+   decoded images in total (declared sizes are checked before decoding);
 3. compares it with the stored wallet and shows a confirmation with the
    card count, how many will be added, and which are skipped.
 
@@ -168,6 +217,12 @@ The import is **one IndexedDB transaction**: it re-checks that the wallet
 still matches what the confirmation showed (another tab may have changed
 it), adds cards with `add` (never `put`) and extends `walletOrder`. Any
 failure rolls back every card, so a restore is all-or-nothing.
+
+**Private browsing.** Private windows (Safari Private Browsing, incognito
+modes) may restrict or quickly discard IndexedDB storage, and may refuse
+large writes. A restore failing there is an environmental limitation of
+the private window, not evidence of a defect in normal-browser restore;
+restore into a normal (non-private) browser window or the installed app.
 
 ### v0.4.2 — QR sizing, checkout layout and DIM8 palette (Iteration 4E)
 
@@ -455,8 +510,9 @@ store requires GS1-128.
   saved on the device; new cards go last; renaming or recolouring never
   reorders tiles.
 - **Local only.** Cards exist only in this browser profile on this device.
-  There is no backup, export, or sync. Clearing site data, uninstalling the
-  PWA (on some platforms), or using a private window loses them.
+  There is no sync; use **Export all cards** to keep a backup file. Clearing
+  site data, uninstalling the PWA (on some platforms), or using a private
+  window loses the stored cards.
 - **No storage fallback.** If IndexedDB is unavailable or fails, the app says
   so and offers **Try again**.
 - An automatic app update reloads the page; an unsaved add-card flow open at
@@ -530,6 +586,8 @@ Timestamps are kept internally but never shown.
 - Node.js `^22.22.2`, `^24.15.0`, or `>=26` (see `.nvmrc`; the lower bounds
   come from jsdom/Vitest).
 - npm (the lockfile is `package-lock.json`).
+- Python 3 (standard library only) on `PATH` as `python3`, for
+  `scripts/split-m8trx-backup.py` and its test in `npm test`.
 
 ## Commands
 
@@ -544,6 +602,7 @@ Timestamps are kept internally but never shown.
 | `npm run build`     | Type-check, then build to `dist/` with the manifest and service worker. |
 | `npm run preview`   | Serve the production build locally.                            |
 | `npm run icons`     | Regenerate the icons in `public/` from `scripts/generate-icons.mjs`. |
+| `python3 scripts/split-m8trx-backup.py FILE.m8trx` | Split an oversized backup into restorable parts (see [Advanced](#advanced-working-with-oversized-m8trx-backups)). |
 
 ## Project structure
 
@@ -551,6 +610,9 @@ Timestamps are kept internally but never shown.
 index.html                  HTML shell: viewport, dark theme colour, favicon
 vite.config.ts              Vite, PWA (manifest + service worker), and Vitest config
 scripts/generate-icons.mjs  Reproducible icon + logo-derivative generator (Node built-ins only)
+scripts/split-m8trx-backup.py  Splits an oversized backup into restorable parts (Python stdlib)
+LICENSE                     GNU GPL version 3 (unmodified official text)
+THIRD_PARTY_NOTICES.md      Third-party licences and asset provenance
 public/                     Generated icons (committed outputs of `npm run icons`)
 assets/brand/               Official DIM8 logo source artwork (unmodified, not bundled)
 src/
@@ -558,7 +620,8 @@ src/
   app/App.tsx               Composition root: screen state (wallet/add/about/checkout),
                             management + restore dialogs, lazy-loads the add flow
   app/AddCardFooter.tsx     Add Card footer: Backup, About, copyright
-  app/appMetadata.ts        Product name, version (from package.json), legal copy
+  app/appMetadata.ts        Product name, version (from package.json), legal copy,
+                            official repository and README links
   app/pwaManifest.ts        Web app manifest data and theme colours
   assets/brand/             Generated DIM8 logo derivatives (bundled, precached)
   components/               Shared presentation (AppHeader + BrandLockup, Dialog,
@@ -584,12 +647,14 @@ src/
     checkout/               CheckoutScreen, gesture.ts (swipe rules), useWakeLock
     add/                    AddCardFlow, CameraScanner, ImageImport (crop),
                             ManualEntry, CardDetailsForm, captureServices
-    backup/                 backupFormat.ts (format, validation, restore plan),
-                            BackupControls, RestoreDialog, saveFile.ts (share/download)
+    backup/                 backupFormat.ts (format, limits, validation, restore plan),
+                            BackupControls, RestoreDialog, OversizedExportDialog,
+                            saveFile.ts (share/download)
     about/                  AboutView
   styles/                   tokens.css, base.css, app.css
   test/setup.ts             Shared test setup
   test/node/png.ts          Minimal PNG reader for host tests (Node only)
+  test/node/splitBackup.node.test.ts  Runs the split script, parses every part
   test/fixtures/qr/         QR import fixtures + manifest.json (exact values)
 scripts/generate-qr-fixtures.py  Reproducible QR fixture generator
                             (qrencode CLI + Python Pillow/NumPy)
@@ -648,6 +713,20 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
   unchanged), the v0.4.2 → v0.5.0 upgrade leaving data untouched, and App
   flows (header, About, export, restore on "another device", duplicates,
   rejected files, failed save, share-sheet cancel).
+- **Restore limits and oversized exports**: restore of exactly 60 MiB of
+  decoded images (an 80+ MiB file) and refusal one byte over; UTF-8 file
+  accounting; each warning reason and combinations, matched against what
+  restore refuses; complete, byte-exact export of a 64 MiB wallet; App
+  warning copy, README link, Cancel (nothing saved, cards unchanged),
+  Continue Export (every card and image byte saved), the card-count reason,
+  and the "file this large" failure message; the About repository link.
+- **Split utility** (`splitBackup.node.test.ts`, needs `python3`): splits
+  synthetic oversized backups, checks every part with the app's own
+  `parseBackup()` (limits, exact records, IDs, order, base64), part-by-part
+  restore order and duplicate skipping, deterministic names, no overwriting,
+  malformed and unsplittable input, and that its limits equal `BACKUP_LIMITS`.
+- **Release metadata** (`releaseMetadata.node.test.ts`): the README anchor
+  used by the in-app link, the GPL text and `package.json` licence.
 - **PWA identity** (`pwaAssets.node.test.ts`): manifest names/colours, icon
   files at their declared pixel sizes, index.html metadata, version from
   `package.json`, logo derivatives.
@@ -842,3 +921,128 @@ sync: `--color-bg` / `--dim8-bg` in `src/styles/tokens.css`, `THEME_COLOR` /
 `BACKGROUND_COLOR` in `src/app/pwaManifest.ts`, and `theme-color` plus the
 inline `<html>` background in `index.html` (which prevents a light flash
 before the stylesheet loads). `src/app/pwaAssets.node.test.ts` checks this.
+
+## Advanced: Working With Oversized M8TRX Backups
+
+M8TRX always exports your complete wallet, even when the file is larger
+than one restore accepts. This section explains the file and how to divide
+an oversized backup into smaller backups that restore normally. It is meant
+for users comfortable with a command line; ordinary backups never need it.
+
+### What a `.m8trx` file is
+
+- `.m8trx` is only a custom filename extension. The file itself is ordinary
+  **UTF-8 JSON** (see [Backup format and restore policy](#backup-format-and-restore-policy)
+  for the layout) and can be opened with any JSON tool.
+- Imported images and kept QR artwork are stored as **Base64 of the original
+  image bytes** (`barcode.data`, with the decoded size in
+  `barcode.byteLength`). Backup never recompresses, resizes or redraws an
+  image. Generated barcodes are stored as format + value.
+- **Standard restore** accepts up to **60 MiB of decoded image data in
+  total**, subject to the other limits in the table above (4 MiB per image,
+  1000 cards, a 96 MiB file, text-field lengths).
+- **Oversized exports remain available.** After the **Backup Exceeds Restore
+  Limit** warning you can still save the complete file, but M8TRX may not
+  be able to restore it directly. Splitting it as described below makes it
+  restorable.
+
+Examining a backup (examples; substitute your own file name):
+
+```sh
+# Summary with jq: format, version, card count, total decoded image bytes
+jq '{format, version, exportedAt, cards: (.cards | length),
+     imageBytes: ([.cards[].barcode | select(.kind == "image") | .byteLength] | add // 0)}' \
+   m8trx-backup-2026-11-14.m8trx
+
+# The same with Python 3 (standard library only)
+python3 -c 'import json, sys; d = json.load(open(sys.argv[1], encoding="utf-8")); \
+print(len(d["cards"]), "cards,", sum(c["barcode"].get("byteLength", 0) for c in d["cards"]), "image bytes")' \
+   m8trx-backup-2026-11-14.m8trx
+```
+
+### Manual recovery: splitting a backup into parts
+
+**Never cut the file at arbitrary byte offsets** (for example with `split`
+or a text editor): the pieces would not be valid JSON and could not be
+restored. Instead, divide the *cards* between several complete backup
+documents. Each part must:
+
+- keep the same `"format": "m8trx-backup"` and `"version": 1`, and valid
+  `exportedAt` and `app` metadata (copy them from the original);
+- contain complete, unmodified card records — every field copied as-is,
+  including each card's stable `id`, the barcode value and format,
+  `createdAt`/`updatedAt`, `notes`, and the image `mimeType`, `byteLength`
+  and Base64 `data`;
+- have an `order` array naming exactly the cards in that part, each once;
+- stay within every standard restore limit (60 MiB of decoded images,
+  1000 cards, 96 MiB file);
+- be independently parseable and importable.
+
+`scripts/split-m8trx-backup.py` does exactly this with Python 3's standard
+library. It validates the input as M8TRX's restore does, keeps the wallet
+order (part 1 holds the first cards, part 2 the next, …), fills each part
+as far as the limits allow, re-validates every part before writing any,
+never overwrites existing files, and stops without writing anything if a
+single card could never be restored (for example an image over 4 MiB).
+Barcode check digits, names and colours are copied unchanged and checked by
+M8TRX itself during import. The script is covered by
+`src/test/node/splitBackup.node.test.ts`, which feeds every part it writes
+through the app's own restore parser.
+
+```sh
+python3 scripts/split-m8trx-backup.py m8trx-backup-2026-11-14.m8trx
+# -> m8trx-backup-2026-11-14-part-01-of-02.m8trx
+#    m8trx-backup-2026-11-14-part-02-of-02.m8trx
+
+# Optional: a separate output folder, or smaller parts than the limits allow
+python3 scripts/split-m8trx-backup.py m8trx-backup-2026-11-14.m8trx \
+    --output-dir parts --max-image-mib 30 --max-cards 200
+```
+
+The original file is only read, never changed.
+
+### Importing the parts
+
+1. Put the part files anywhere the device can open files from: **iCloud
+   Drive**, **local device storage** ("On My iPhone"), **USB storage**, or
+   any other ordinary file-transfer location.
+2. In M8TRX, open **Add Card → Restore from backup** and choose **one part**.
+   Confirm the summary.
+3. Repeat for each remaining part, **one file at a time**, in numeric order.
+
+Each restore works as usual: existing cards are kept, cards already in the
+wallet are skipped as duplicates, and new cards are **appended after the
+cards already in the wallet**. Card order across several files therefore
+follows the order in which you import them: importing the parts in numeric
+order rebuilds the original wallet order (after any cards you already had);
+importing them in another order places each part's cards in that sequence.
+Restoring a part twice adds nothing the second time.
+
+**Keep your original complete backup** until every part has been restored
+successfully and you have checked the wallet.
+
+If restoring fails in a private browsing window, try again in a normal
+browser window or the installed app (see *Private browsing* above).
+
+## License
+
+Copyright © 2026 Dimension Eight Labs LLC
+
+M8TRX is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version (SPDX: `GPL-3.0-or-later`).
+
+M8TRX is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+details. The complete licence text is in [`LICENSE`](LICENSE).
+
+Third-party components keep their own copyright and licences; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+**Brand assets.** The DIM8 Labs and Dimension Eight Labs names, the DIM8
+logo, and the M8TRX product name and identity are company branding of
+Dimension Eight Labs LLC. The GPL covers the software's copyright; it does
+not grant trademark rights. See `THIRD_PARTY_NOTICES.md` for the brand-asset
+statement.

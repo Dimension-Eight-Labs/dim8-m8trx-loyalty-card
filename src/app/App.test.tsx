@@ -17,7 +17,7 @@ import { verifyRoundTrip } from '../features/barcodes/verify.ts'
 import type { CardRepository } from '../features/cards/CardRepository.ts'
 import { LONG_PRESS_MS } from '../features/wallet/useWalletReorder.ts'
 import { App, LOADING_MESSAGE } from './App.tsx'
-import { APP_VERSION } from './appMetadata.ts'
+import { APP_VERSION, OVERSIZED_BACKUP_DOCS_URL, SOURCE_REPOSITORY_URL } from './appMetadata.ts'
 
 let factory: IDBFactory
 
@@ -1227,6 +1227,15 @@ describe('M8TRX branding, About, and backup/restore (v0.5.0)', () => {
     const link = within(about).getByRole('link', { name: 'dim8labs.com' })
     expect(link).toHaveAttribute('href', 'https://dim8labs.com')
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+    // A second, independent link to the official source repository.
+    const source = within(about).getByRole('link', { name: 'Source Code & Documentation' })
+    expect(source).toHaveAttribute('href', 'https://github.com/Dimension-Eight-Labs/dim8-m8trx-loyalty-card')
+    expect(SOURCE_REPOSITORY_URL).toBe('https://github.com/Dimension-Eight-Labs/dim8-m8trx-loyalty-card')
+    expect(source).toHaveAttribute('target', '_blank')
+    expect(source).toHaveAttribute('rel', expect.stringContaining('noopener'))
+    expect(source).not.toBe(link)
+    expect(source.contains(link) || link.contains(source)).toBe(false)
+    expect(within(about).getAllByRole('link')).toHaveLength(2)
     expect(within(about).getByText(/simple, offline-first wallet for your loyalty cards/)).toHaveTextContent(
       'M8TRX is a simple, offline-first wallet for your loyalty cards. Scan them once. Show them when you need them. No accounts, no tracking, no unnecessary nonsense.',
     )
@@ -1251,6 +1260,152 @@ describe('M8TRX branding, About, and backup/restore (v0.5.0)', () => {
     expect(doc.cards.map((card: { barcode: { kind: string } }) => card.barcode.kind)).toEqual(['image', 'generated', 'text', 'generated'])
     expect(Array.from(atob(doc.cards[0].barcode.data), (ch) => ch.charCodeAt(0))).toEqual(PNG)
     expect(await screen.findByText(/backup downloaded/i)).toBeInTheDocument()
+    // An ordinary wallet is far within restore limits: no warning at any point.
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  describe('oversized exports', () => {
+    const MIB = 1024 * 1024
+    const IMAGE_SIZE = 4 * MIB // the per-image limit
+
+    /** A distinct 4 MiB PNG-signed image per seed. */
+    function bigImageBytes(seed: number) {
+      const bytes = new Uint8Array(IMAGE_SIZE)
+      bytes.set(PNG.slice(0, 8))
+      for (let i = 8; i < IMAGE_SIZE; i++) bytes[i] = (i * 13 + seed * 5) & 0xff
+      return bytes
+    }
+
+    function toBase64(bytes: Uint8Array) {
+      let binary = ''
+      for (let i = 0; i < bytes.byteLength; i += 0x4000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x4000))
+      return btoa(binary)
+    }
+
+    /** 16 x 4 MiB = 64 MiB of artwork: over the 60 MiB standard restore limit. */
+    async function seedOversizedWallet(repository: CardRepository) {
+      const NodeBlob = await stubNodeBlob()
+      for (let i = 0; i < 16; i++) {
+        await repository.create({ storeName: `Art ${i}`, color: 'teal', barcode: { kind: 'image', image: new NodeBlob([bigImageBytes(i)], { type: 'image/png' }) } })
+      }
+    }
+
+    /** IDs, names and every image byte (as base64) of the stored wallet. */
+    async function snapshot(repository: CardRepository) {
+      return Promise.all(
+        (await repository.list()).map(async (card) => ({
+          ...card,
+          barcode: card.barcode.kind === 'image' ? toBase64(new Uint8Array(await card.barcode.image.arrayBuffer())) : card.barcode,
+        })),
+      )
+    }
+
+    it('warns before exporting more than 60 MiB of images; Cancel creates nothing and changes nothing', async () => {
+      const repository = makeRepository()
+      await seedOversizedWallet(repository)
+      const before = await snapshot(repository)
+      const saveFile = vi.fn(async () => 'downloaded' as const)
+      const user = userEvent.setup()
+      render(<App repository={repository} capture={fakeCapture()} saveFile={saveFile} />)
+      await user.click(await screen.findByRole('button', { name: /add card/i }))
+      await user.click(await screen.findByRole('button', { name: /export all cards/i }))
+
+      const dialog = await screen.findByRole('alertdialog', { name: 'Backup Exceeds Restore Limit' }, { timeout: 30_000 })
+      const body = within(dialog).getByTestId('oversized-export-body')
+      expect(Array.from(body.querySelectorAll('p'), (p) => p.textContent)).toEqual([
+        'Your wallet contains more than 60 MiB of image data, exceeding M8TRX’s standard restore limit.',
+        'You can still export and save your complete backup, but M8TRX cannot restore a file this large directly.',
+        'Consider removing unused cards or large imported images before creating another backup.',
+        'Advanced users can divide the JSON backup into smaller, compatible files. Instructions are available in the M8TRX GitHub README.',
+        'Your existing cards will not be changed.',
+      ])
+      const docs = within(dialog).getByRole('link', { name: 'M8TRX GitHub README' })
+      expect(docs).toHaveAttribute('href', 'https://github.com/Dimension-Eight-Labs/dim8-m8trx-loyalty-card#advanced-working-with-oversized-m8trx-backups')
+      expect(docs).toHaveAttribute('href', OVERSIZED_BACKUP_DOCS_URL)
+      expect(docs).toHaveAttribute('target', '_blank')
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      expect(within(dialog).getByRole('button', { name: 'Continue Export' })).toBeInTheDocument()
+
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(await screen.findByText('Backup not created. Your cards were not changed.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Save backup' })).not.toBeInTheDocument()
+      expect(saveFile).not.toHaveBeenCalled()
+      expect(await snapshot(makeRepository())).toEqual(before)
+    }, 60_000)
+
+    it('Continue Export saves the complete, unmodified backup', async () => {
+      const repository = makeRepository()
+      await seedOversizedWallet(repository)
+      const before = await snapshot(repository)
+      const saveFile = vi.fn(async () => 'downloaded' as const)
+      const user = userEvent.setup()
+      render(<App repository={repository} capture={fakeCapture()} saveFile={saveFile} />)
+      await user.click(await screen.findByRole('button', { name: /add card/i }))
+      await user.click(await screen.findByRole('button', { name: /export all cards/i }))
+      const dialog = await screen.findByRole('alertdialog', {}, { timeout: 30_000 })
+      expect(saveFile).not.toHaveBeenCalled() // nothing is saved without the acknowledgement
+      await user.click(within(dialog).getByRole('button', { name: 'Continue Export' }))
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+
+      await user.click(await screen.findByRole('button', { name: 'Save backup' }))
+      await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1))
+      const file = (saveFile.mock.calls[0] as unknown as [File])[0]
+      const doc = JSON.parse(await file.text()) as { order: string[]; cards: Array<{ id: string; storeName: string; barcode: { byteLength: number; data: string } }> }
+      expect(doc.order).toEqual(before.map((card) => card.id))
+      expect(doc.cards).toHaveLength(16)
+      for (const [index, card] of doc.cards.entries()) {
+        expect(card.id).toBe(before[index]!.id)
+        expect(card.storeName).toBe(before[index]!.storeName)
+        expect(card.barcode.byteLength).toBe(IMAGE_SIZE)
+        expect(card.barcode.data === before[index]!.barcode).toBe(true)
+      }
+      expect(await screen.findByText(/backup downloaded/i)).toBeInTheDocument()
+      expect(await snapshot(makeRepository())).toEqual(before)
+    }, 60_000)
+
+    it('names the limit actually exceeded: more than 1,000 cards', async () => {
+      const repository = makeRepository()
+      const stamp = '2026-01-01T00:00:00.000Z'
+      const cards = Array.from({ length: 1001 }, (_, i) => ({
+        id: `card-${i}`,
+        schemaVersion: 2 as const,
+        storeName: `Store ${i}`,
+        color: 'teal',
+        barcode: { kind: 'generated' as const, format: 'code128' as const, value: `V${i}` },
+        createdAt: stamp,
+        updatedAt: stamp,
+      }))
+      await repository.importCards(cards, [])
+      const saveFile = vi.fn(async () => 'downloaded' as const)
+      const user = userEvent.setup()
+      render(<App repository={repository} capture={fakeCapture()} saveFile={saveFile} />)
+      await user.click(await screen.findByRole('button', { name: /add card/i }))
+      await user.click(await screen.findByRole('button', { name: /export all cards/i }))
+      const body = within(await screen.findByRole('alertdialog', {}, { timeout: 30_000 })).getByTestId('oversized-export-body')
+      expect(body.firstElementChild).toHaveTextContent('Your wallet contains more than 1,000 cards, exceeding M8TRX’s standard restore limit.')
+      expect(body).not.toHaveTextContent('image data')
+      await user.keyboard('{Escape}') // same as Cancel
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(saveFile).not.toHaveBeenCalled()
+      expect(await makeRepository().list()).toHaveLength(1001)
+    }, 60_000)
+  })
+
+  it('reports a browser string-size failure while creating the backup accurately', async () => {
+    const real = makeRepository()
+    await seedWallet(real)
+    let calls = 0
+    // The first list() is the wallet load; the export's snapshot then fails as an engine would.
+    const failing: CardRepository = { ...real, list: async () => (calls++ === 0 ? real.list() : Promise.reject(new RangeError('Invalid string length'))) }
+    const saveFile = vi.fn(async () => 'downloaded' as const)
+    const user = userEvent.setup()
+    render(<App repository={failing} capture={fakeCapture()} saveFile={saveFile} />)
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    await user.click(await screen.findByRole('button', { name: /export all cards/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('This browser couldn’t create a backup file this large. No backup was created, and your cards were not changed.')
+    expect(saveFile).not.toHaveBeenCalled()
+    expect(await real.list()).toHaveLength(4)
   })
 
   it('restores a backup into an empty wallet on another device, preserving order and artwork', async () => {

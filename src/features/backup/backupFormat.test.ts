@@ -11,12 +11,18 @@ import {
   BACKUP_FORMAT_VERSION,
   BACKUP_LIMITS,
   BackupError,
+  assessRestoreLimits,
   backupFileName,
+  base64Length,
   blobBytes,
   createBackup,
+  createBackupExport,
   parseBackup,
   planRestore,
   readBackupFile,
+  utf8ByteLength,
+  type BackupLimits,
+  type BackupStats,
 } from './backupFormat.ts'
 
 const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
@@ -213,6 +219,18 @@ describe('backup validation (untrusted input)', () => {
     expect(() => parseBackup(withImages(1), { ...small, imageBytes: 100 })).toThrow(/too large/)
   })
 
+  it('counts the file limit in UTF-8 bytes, not UTF-16 characters', async () => {
+    const text = await createBackup([card('n', 'Café ☕', { kind: 'text', value: 'Ünïcødé 🎟️' }, { notes: 'naïve' })], meta)
+    const bytes = new TextEncoder().encode(text).byteLength
+    expect(utf8ByteLength(text)).toBe(bytes)
+    expect(bytes).toBeGreaterThan(text.length)
+    expect(parseBackup(text, { ...BACKUP_LIMITS, fileBytes: bytes })).toHaveLength(1)
+    // Fits as UTF-16 code units, but not as UTF-8 bytes: refused.
+    expect(() => parseBackup(text, { ...BACKUP_LIMITS, fileBytes: bytes - 1 })).toThrow(/too large/)
+    expect(text.length).toBeLessThanOrEqual(bytes - 1)
+    expect(utf8ByteLength('\ud800x')).toBe(4) // lone surrogate: U+FFFD (3 bytes), as Blob writes it
+  })
+
   it('checks the file size before reading it', async () => {
     const huge = { size: BACKUP_LIMITS.fileBytes + 1, text: () => Promise.reject(new Error('must not read')) } as unknown as Blob
     await expect(readBackupFile(huge)).rejects.toThrow(/too large/)
@@ -266,5 +284,142 @@ describe('restore planning', () => {
     const cards = parseBackup(await createBackup([card('n', 'Num', { kind: 'text', value: '4006381333931' })], meta))
     const plan = await planRestore(cards, [wallet[1]!])
     expect(plan.toImport).toHaveLength(1)
+  })
+})
+
+// ---- Standard restore limit (60 MiB) and oversized exports ---------------------
+
+const MIB = 1024 * 1024
+const FULL_IMAGE = BACKUP_LIMITS.imageBytes // 4 MiB, the per-image limit
+
+/** A distinct full-size PNG-signed image: `seed` varies every byte after the signature. */
+function bigImage(seed: number, size = FULL_IMAGE): Blob {
+  const bytes = new Uint8Array(size)
+  bytes.set(PNG)
+  for (let i = PNG.length; i < size; i++) bytes[i] = (i * 31 + seed * 7) & 0xff
+  return new Blob([bytes], { type: 'image/png' })
+}
+
+/** Independent base64 encoder for expectations (chunked for large inputs). */
+function toBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i += 0x4000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x4000))
+  return btoa(binary)
+}
+
+function imageCards(count: number, size = FULL_IMAGE): LoyaltyCard[] {
+  return Array.from({ length: count }, (_, i) => card(`img-${i}`, `Image ${i}`, { kind: 'image', image: bigImage(i, size) }))
+}
+
+describe('standard restore limit: 60 MiB of decoded images', () => {
+  it('is 62,914,560 bytes, with a file limit that leaves room for base64 and card text', () => {
+    expect(BACKUP_LIMITS.totalImageBytes).toBe(62_914_560)
+    expect(BACKUP_LIMITS.imageBytes).toBe(4 * MIB)
+    expect(BACKUP_LIMITS.cards).toBe(1000)
+    // 60 MiB of images is 80 MiB of base64; the file limit must exceed that.
+    expect(base64Length(BACKUP_LIMITS.totalImageBytes)).toBe(80 * MIB)
+    expect(BACKUP_LIMITS.fileBytes).toBe(96 * MIB)
+    expect(BACKUP_LIMITS.fileBytes - base64Length(BACKUP_LIMITS.totalImageBytes)).toBeGreaterThanOrEqual(16 * MIB)
+  })
+
+  it('restores exactly 60 MiB of images, although the JSON file is far larger than 60 MiB', async () => {
+    const cards = imageCards(15) // 15 x 4 MiB = 60 MiB exactly
+    const exported = await createBackupExport(cards, meta)
+    expect(exported.stats.totalImageBytes).toBe(BACKUP_LIMITS.totalImageBytes)
+    expect(exported.issues).toEqual([])
+    expect(exported.stats.fileBytes).toBeGreaterThan(80 * MIB)
+    expect(exported.stats.fileBytes).toBeLessThanOrEqual(BACKUP_LIMITS.fileBytes)
+
+    const restored = parseBackup(exported.text)
+    expect(restored.map((c) => c.id)).toEqual(cards.map((c) => c.id))
+    // Byte-for-byte artwork, checked on the first and last image.
+    for (const index of [0, 14]) {
+      const a = cards[index]!.barcode
+      const b = restored[index]!.barcode
+      if (a.kind !== 'image' || b.kind !== 'image') throw new Error('expected image cards')
+      expect(await blobBytes(b.image)).toEqual(await blobBytes(a.image))
+    }
+
+    // The file-size check before reading accepts the same file.
+    const file = { size: exported.stats.fileBytes, text: () => Promise.resolve(exported.text) } as unknown as Blob
+    await expect(readBackupFile(file)).resolves.toHaveLength(15)
+  }, 60_000)
+
+  it('refuses one byte over the 60 MiB image budget', async () => {
+    const doc = JSON.parse(await createBackup(imageCards(15), meta)) as { cards: Record<string, unknown>[]; order: string[] }
+    // A one-byte image (no recognisable signature, which restore allows).
+    const tiny = { ...doc.cards[0]!, id: 'tiny', barcode: { kind: 'image', mimeType: 'image/png', byteLength: 1, data: btoa('x') } }
+    expect(() => parseBackup(JSON.stringify({ ...doc, cards: [...doc.cards, tiny], order: [...doc.order, 'tiny'] }))).toThrow(/too large/)
+  }, 60_000)
+})
+
+describe('oversized exports', () => {
+  it('exports a wallet over 60 MiB completely, unmodified, and reports the image budget', async () => {
+    const cards = imageCards(16) // 64 MiB
+    const exported = await createBackupExport(cards, meta)
+    expect(exported.issues).toEqual(['totalImageBytes'])
+    expect(exported.stats).toMatchObject({ cards: 16, totalImageBytes: 64 * MIB, largestImageBytes: FULL_IMAGE, fieldTooLong: false })
+
+    const doc = JSON.parse(exported.text) as { cards: Array<{ id: string; barcode: { byteLength: number; data: string } }>; order: string[] }
+    expect(doc.order).toEqual(cards.map((c) => c.id))
+    expect(doc.cards.map((c) => c.id)).toEqual(doc.order)
+    for (const [index, exportedCard] of doc.cards.entries()) {
+      const original = cards[index]!.barcode
+      if (original.kind !== 'image') throw new Error('expected image cards')
+      expect(exportedCard.barcode.byteLength).toBe(FULL_IMAGE)
+      // Every byte of every image, compared as base64 of the original bytes.
+      expect(exportedCard.barcode.data.length).toBe(base64Length(FULL_IMAGE))
+      expect(exportedCard.barcode.data === toBase64(await blobBytes(original.image))).toBe(true)
+    }
+    // The exported file is exactly what restore would refuse (and why).
+    expect(() => parseBackup(exported.text)).toThrow(/too large/)
+  }, 60_000)
+
+  it('reports no issue for ordinary wallets', async () => {
+    const exported = await createBackupExport(wallet, meta)
+    expect(exported.issues).toEqual([])
+    expect(exported.text).toBe(await createBackup(wallet, meta))
+    expect(exported.stats.fileBytes).toBe(new TextEncoder().encode(exported.text).byteLength)
+  })
+
+  it('reports each exceeded restore limit, and combinations, in a fixed order', async () => {
+    const base: BackupStats = { cards: 10, totalImageBytes: 100, largestImageBytes: 50, fileBytes: 1000, fieldTooLong: false }
+    const limits = { ...BACKUP_LIMITS, cards: 10, totalImageBytes: 100, imageBytes: 50, fileBytes: 1000 }
+    expect(assessRestoreLimits(base, limits)).toEqual([]) // every value exactly at its limit
+    expect(assessRestoreLimits({ ...base, totalImageBytes: 101 }, limits)).toEqual(['totalImageBytes'])
+    expect(assessRestoreLimits({ ...base, largestImageBytes: 51 }, limits)).toEqual(['imageBytes'])
+    expect(assessRestoreLimits({ ...base, cards: 11 }, limits)).toEqual(['cards'])
+    expect(assessRestoreLimits({ ...base, fileBytes: 1001 }, limits)).toEqual(['fileBytes'])
+    expect(assessRestoreLimits({ ...base, fieldTooLong: true }, limits)).toEqual(['fields'])
+    expect(assessRestoreLimits({ cards: 11, totalImageBytes: 101, largestImageBytes: 51, fileBytes: 1001, fieldTooLong: true }, limits)).toEqual([
+      'totalImageBytes',
+      'imageBytes',
+      'cards',
+      'fileBytes',
+      'fields',
+    ])
+  })
+
+  it('measures real exports against every limit, and its verdict matches restore', async () => {
+    const small: BackupLimits = { ...BACKUP_LIMITS, imageBytes: 400, totalImageBytes: 700 }
+    const images = [wallet[4]!, { ...wallet[4]!, id: 'i2' }, { ...wallet[4]!, id: 'i3' }] // three ~308-byte images
+    const cases: Array<[LoyaltyCard[], BackupLimits, string[]]> = [
+      [images.slice(0, 2), small, []],
+      [images, small, ['totalImageBytes']],
+      [images.slice(0, 1), { ...small, imageBytes: 100 }, ['imageBytes']],
+      [wallet.slice(0, 3), { ...small, cards: 2 }, ['cards']],
+      [wallet.slice(0, 1), { ...small, fileBytes: 50 }, ['fileBytes']],
+      [[{ ...wallet[3]!, notes: 'n'.repeat(BACKUP_LIMITS.notesLength + 1) }], small, ['fields']],
+      [[card('v', 'Long', { kind: 'text', value: 'v'.repeat(BACKUP_LIMITS.valueLength + 1) })], small, ['fields']],
+      [[card('x'.repeat(BACKUP_LIMITS.idLength + 1), 'Long ID', { kind: 'text', value: '1' })], small, ['fields']],
+      [images, { ...small, cards: 2, fileBytes: 100 }, ['totalImageBytes', 'cards', 'fileBytes']],
+    ]
+    for (const [cards, limits, expected] of cases) {
+      const exported = await createBackupExport(cards, meta, limits)
+      expect(exported.issues).toEqual(expected)
+      // A file is flagged exactly when restore (with the same limits) refuses it.
+      if (expected.length === 0) expect(parseBackup(exported.text, limits)).toHaveLength(cards.length)
+      else expect(() => parseBackup(exported.text, limits)).toThrow(BackupError)
+    }
   })
 })

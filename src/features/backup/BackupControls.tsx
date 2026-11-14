@@ -6,6 +6,13 @@
  * the second, "Save backup", hands the file to the share sheet or a download
  * inside its own tap, which iOS requires (see saveFile.ts).
  *
+ * Oversized exports: when the prepared file exceeds a standard restore limit
+ * (backupFormat.ts, `issues`), `confirmOversizedExport` asks the user first
+ * (OversizedExportDialog, owned by App). Cancel discards the prepared file
+ * and nothing is offered for saving; Continue Export proceeds to the usual
+ * "Save backup" step with the complete, unmodified file. Stored cards are
+ * only ever read here, so neither choice can change them.
+ *
  * Restore: the file picker opens within the tap. The chosen file is read and
  * fully validated (backupFormat.ts) and compared with the stored wallet
  * before anything is written; the resulting plan goes to `onRestorePlanned`,
@@ -22,9 +29,10 @@ import type { LoyaltyCard } from '../cards/card.ts'
 import {
   BACKUP_MIME_TYPE,
   backupFileName,
-  createBackup,
+  createBackupExport,
   planRestore,
   readBackupFile,
+  type RestoreLimitIssue,
   type RestorePlan,
 } from './backupFormat.ts'
 import { saveFileWithBrowser, type SaveFile } from './saveFile.ts'
@@ -35,9 +43,16 @@ export interface BackupControlsProps {
   /** Reads the stored wallet afresh (export source and restore comparison). */
   loadSnapshot: () => Promise<LoyaltyCard[]>
   onRestorePlanned: (plan: RestorePlan) => void
+  /**
+   * Asks the user whether to keep an export that exceeds standard restore
+   * limits; resolves true for Continue Export, false for Cancel.
+   */
+  confirmOversizedExport: (issues: readonly RestoreLimitIssue[]) => Promise<boolean>
   saveFile?: SaveFile
   now?: () => Date
 }
+
+const TOO_LARGE_TO_CREATE = 'This browser couldn’t create a backup file this large. No backup was created, and your cards were not changed.'
 
 type Busy = 'export' | 'save' | 'restore' | null
 
@@ -45,6 +60,7 @@ export function BackupControls({
   cardCount,
   loadSnapshot,
   onRestorePlanned,
+  confirmOversizedExport,
   saveFile = saveFileWithBrowser,
   now = () => new Date(),
 }: BackupControlsProps) {
@@ -74,10 +90,17 @@ export function BackupControls({
       const cards = await loadSnapshot()
       if (cards.length === 0) throw new Error('There are no cards to export yet.')
       const at = now()
-      const text = await createBackup(cards, { appName: APP_NAME, appVersion: APP_VERSION, now: at })
+      const { text, issues } = await createBackupExport(cards, { appName: APP_NAME, appVersion: APP_VERSION, now: at })
+      if (issues.length > 0 && !(await confirmOversizedExport(issues))) {
+        setMessage('Backup not created. Your cards were not changed.')
+        return
+      }
       setReady({ file: new File([text], backupFileName(at), { type: BACKUP_MIME_TYPE }), count: cards.length })
     } catch (caught) {
-      setError(messageOf(caught, 'Couldn’t create the backup.'))
+      // Engines throw RangeError when a string (the JSON document or a base64
+      // image) exceeds their maximum length; say so instead of showing the
+      // engine's raw message. A true out-of-memory crash can't be caught.
+      setError(caught instanceof RangeError ? TOO_LARGE_TO_CREATE : messageOf(caught, 'Couldn’t create the backup.'))
     } finally {
       setBusy(null)
     }

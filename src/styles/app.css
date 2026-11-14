@@ -1411,6 +1411,24 @@ html.checkout-open body {
   overflow-wrap: anywhere;
 }
 
+/* ---- Oversized export warning ------------------------------------------- */
+/* Six short paragraphs: let the panel scroll on short phone screens. */
+.dialog--scroll {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.export-warning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.export-warning a {
+  color: var(--color-accent);
+  text-underline-offset: 0.2em;
+}
+
 /* ---- About ------------------------------------------------------------------ */
 .about {
   display: flex;

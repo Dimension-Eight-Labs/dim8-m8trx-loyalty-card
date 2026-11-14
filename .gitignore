@@ -15,3 +15,16 @@ dev-dist/
 
 # Local agent tooling
 .ai/
+
+# Personal data: real M8TRX backups contain loyalty card numbers and must
+# never be committed. Tests generate synthetic backups in temporary folders.
+*.m8trx
+
+# Local secrets and environment configuration (an example file is allowed)
+.env
+.env.*
+!.env.example
+
+# Python bytecode from the scripts/ utilities
+__pycache__/
+*.pyc

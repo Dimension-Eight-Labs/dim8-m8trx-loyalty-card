@@ -2,9 +2,11 @@
  * About M8TRX: a minimal product page reached from the Add Card screen.
  *
  * Content is fixed product copy from src/app/appMetadata.ts; the version is
- * the built package version (never typed by hand). The website link opens in
- * a new browsing context and is the only network-capable element here; the
- * page itself works offline. Back returns to the Add Card screen.
+ * the built package version (never typed by hand). Two independent links,
+ * the company website and the official source repository (code, licence and
+ * documentation), open in a new browsing context; they are the only
+ * network-capable elements here and the page itself works offline. Back
+ * returns to the Add Card screen.
  */
 import { BrandLockup } from '../../components/AppHeader.tsx'
 import { BackIcon } from '../../components/icons.tsx'
@@ -14,6 +16,8 @@ import {
   APP_DESCRIPTION,
   APP_VERSION,
   LEGAL_NOTICE,
+  SOURCE_LINK_LABEL,
+  SOURCE_REPOSITORY_URL,
   WEBSITE_LABEL,
   WEBSITE_URL,
 } from '../../app/appMetadata.ts'
@@ -44,6 +48,11 @@ export function AboutView({ focusOnMount, onBack }: AboutViewProps) {
       <p className="about__link">
         <a href={WEBSITE_URL} target="_blank" rel="noopener noreferrer">
           {WEBSITE_LABEL}
+        </a>
+      </p>
+      <p className="about__link">
+        <a href={SOURCE_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">
+          {SOURCE_LINK_LABEL}
         </a>
       </p>
       <p className="about__legal">{LEGAL_NOTICE}</p>

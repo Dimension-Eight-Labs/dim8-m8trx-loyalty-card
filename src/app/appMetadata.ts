@@ -17,6 +17,20 @@ export const BRAND_NAME = 'DIM8 Labs'
 export const WEBSITE_URL = 'https://dim8labs.com'
 /** Display form of WEBSITE_URL (no scheme). */
 export const WEBSITE_LABEL = 'dim8labs.com'
+/**
+ * The official public source repository (Dimension Eight Labs on GitHub).
+ * Every in-app link to source or documentation is derived from this one URL.
+ */
+export const SOURCE_REPOSITORY_URL = 'https://github.com/Dimension-Eight-Labs/dim8-m8trx-loyalty-card'
+export const SOURCE_LINK_LABEL = 'Source Code & Documentation'
+/**
+ * README section on splitting oversized backups. The fragment is GitHub's
+ * anchor for the heading "Advanced: Working With Oversized M8TRX Backups"
+ * (lower-cased, punctuation dropped, spaces to hyphens); a host test checks
+ * it against README.md, so renaming the heading means updating this.
+ */
+export const OVERSIZED_BACKUP_DOCS_ANCHOR = 'advanced-working-with-oversized-m8trx-backups'
+export const OVERSIZED_BACKUP_DOCS_URL = `${SOURCE_REPOSITORY_URL}#${OVERSIZED_BACKUP_DOCS_ANCHOR}`
 /** Short notice at the bottom of the Add Card screen. */
 export const COPYRIGHT_NOTICE = `© 2026 ${COMPANY_NAME}`
 /** Full legal notice on the About screen. */

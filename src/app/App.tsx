@@ -29,13 +29,16 @@
  * backup export/restore and About. A validated restore plan is confirmed in
  * RestoreDialog, owned here like the other dialogs so the rest of the app is
  * inert meanwhile; the import itself is one atomic repository transaction.
+ * The oversized-export warning (OversizedExportDialog) is owned here for the
+ * same reason; BackupControls awaits the user's choice through a promise.
  */
 import { lazy, Suspense, useRef, useState } from 'react'
 import { AppHeader } from '../components/AppHeader.tsx'
 import { PlusIcon } from '../components/icons.tsx'
 import { AboutView } from '../features/about/AboutView.tsx'
 import type { CaptureServices } from '../features/add/captureServices.ts'
-import type { RestorePlan } from '../features/backup/backupFormat.ts'
+import type { RestoreLimitIssue, RestorePlan } from '../features/backup/backupFormat.ts'
+import { OversizedExportDialog } from '../features/backup/OversizedExportDialog.tsx'
 import { RestoreDialog } from '../features/backup/RestoreDialog.tsx'
 import type { SaveFile } from '../features/backup/saveFile.ts'
 import { CardEmptyState } from '../features/cards/CardEmptyState.tsx'
@@ -61,6 +64,7 @@ type DialogState =
   | { name: 'menu'; cardId: string }
   | { name: 'delete'; cardId: string }
   | { name: 'restore'; plan: RestorePlan }
+  | { name: 'oversized-export'; issues: readonly RestoreLimitIssue[]; resolve: (proceed: boolean) => void }
   | null
 
 export interface AppProps {
@@ -115,7 +119,7 @@ export function App({ repository, capture, saveFile }: AppProps) {
     setView(next)
   }
 
-  const dialogCard = dialog && dialog.name !== 'restore' ? cards.find((card) => card.id === dialog.cardId) : undefined
+  const dialogCard = dialog && (dialog.name === 'menu' || dialog.name === 'delete') ? cards.find((card) => card.id === dialog.cardId) : undefined
 
   // Checkout replaces the whole app shell: nothing else on screen.
   if (status === 'ready' && view.name === 'checkout' && cards.some((card) => card.id === view.cardId)) {
@@ -178,6 +182,9 @@ export function App({ repository, capture, saveFile }: AppProps) {
                 cardCount={cards.length}
                 loadSnapshot={loadSnapshot}
                 onRestorePlanned={(plan) => setDialog({ name: 'restore', plan })}
+                confirmOversizedExport={(issues) =>
+                  new Promise<boolean>((resolve) => setDialog({ name: 'oversized-export', issues, resolve }))
+                }
                 saveFile={saveFile}
                 onAbout={() => navigate({ name: 'about' })}
               />
@@ -211,7 +218,8 @@ export function App({ repository, capture, saveFile }: AppProps) {
   const showAdd = status === 'ready' && view.name === 'wallet' && cards.length > 0
   const centred = status !== 'ready' || (view.name === 'wallet' && cards.length === 0)
   const restorePlan = dialog?.name === 'restore' ? dialog.plan : null
-  const showDialog = restorePlan !== null || (dialog !== null && dialogCard !== undefined)
+  const oversizedExport = dialog?.name === 'oversized-export' ? dialog : null
+  const showDialog = restorePlan !== null || oversizedExport !== null || (dialog !== null && dialogCard !== undefined)
 
   return (
     <>
@@ -251,6 +259,20 @@ export function App({ repository, capture, saveFile }: AppProps) {
             const restored = result.value
             navigate({ name: 'wallet' }, `Restored ${restored} ${restored === 1 ? 'card' : 'cards'} from your backup.`)
             return null
+          }}
+        />
+      )}
+
+      {oversizedExport && (
+        <OversizedExportDialog
+          issues={oversizedExport.issues}
+          onCancel={() => {
+            setDialog(null)
+            oversizedExport.resolve(false)
+          }}
+          onContinue={() => {
+            setDialog(null)
+            oversizedExport.resolve(true)
           }}
         />
       )}

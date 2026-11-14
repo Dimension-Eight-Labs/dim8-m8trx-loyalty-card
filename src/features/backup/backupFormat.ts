@@ -36,6 +36,13 @@
  * permutation) and either returns every card or throws a BackupError; it
  * never returns a partial result. Limits bound memory use (BACKUP_LIMITS).
  *
+ * Export is never limited: a wallet beyond those restore limits is still
+ * exported completely. `createBackupExport` reports which limits the file
+ * exceeds so the UI can warn before the user saves it; the README section
+ * "Advanced: Working With Oversized M8TRX Backups" (and
+ * scripts/split-m8trx-backup.py) explains how to split such a file into
+ * parts that each restore normally.
+ *
  * Duplicate policy (`planRestore`): existing cards are never overwritten or
  * removed. A backup card is
  * - a duplicate when the wallet already holds a card with the same barcode
@@ -68,18 +75,40 @@ export const BACKUP_MIME_TYPE = 'application/json'
 
 const MIB = 1024 * 1024
 
+/** Length of the padded standard base64 encoding of `byteLength` bytes. */
+export function base64Length(byteLength: number): number {
+  return Math.ceil(byteLength / 3) * 4
+}
+
 /**
- * Safety limits for reading a backup. Generous for real wallets (a card's
+ * Standard restore limits: the single source of truth for what M8TRX can
+ * restore from one file, and for when an export warns that its file exceeds
+ * them (see `assessRestoreLimits`). Generous for real wallets (a card's
  * stored image is capped at CARD_LIMITS.imageBytes, normally far smaller)
  * while keeping a hostile file from exhausting a phone's memory.
+ *
+ * Three different sizes are involved and must not be confused:
+ * - decoded image bytes: the stored artwork itself (`imageBytes`,
+ *   `totalImageBytes`, summed from each image's `byteLength`);
+ * - base64 characters: each image as written in the file, 4/3 of its
+ *   decoded size (60 MiB of images is 80 MiB of base64);
+ * - the complete file: UTF-8 bytes of the whole JSON document (`fileBytes`),
+ *   i.e. base64 plus every card's text fields and JSON punctuation.
  */
 export const BACKUP_LIMITS = {
-  /** Checked before the file is read at all. Base64 inflates images by 4/3. */
-  fileBytes: 64 * MIB,
+  /**
+   * Whole file, in UTF-8 bytes; checked before the file is read at all.
+   * 96 MiB = the base64 of a full 60 MiB image budget (80 MiB) plus 16 MiB
+   * for card text and JSON structure (about 16 KiB per card even at the
+   * 1000-card limit), so a backup within the image budget is never refused
+   * merely because base64 made its file larger than 60 MiB.
+   */
+  fileBytes: 96 * MIB,
   cards: 1000,
+  /** One decoded image; the same cap the wallet applies when saving a card. */
   imageBytes: CARD_LIMITS.imageBytes,
-  /** Sum of all decoded image bytes. */
-  totalImageBytes: 40 * MIB,
+  /** Sum of all decoded image bytes: 60 MiB = 62,914,560 bytes. */
+  totalImageBytes: 60 * MIB,
   idLength: 128,
   notesLength: 10_000,
   valueLength: 4096,
@@ -125,12 +154,75 @@ export function backupFileName(now: Date): string {
 }
 
 /**
- * Serialises `cards` (in wallet order) as a version-1 backup document.
- * Rejects with a BackupError if a stored image can't be read.
+ * A standard restore limit that a backup exceeds, in the order the export
+ * warning lists them:
+ * - `totalImageBytes`: decoded images sum to more than the image budget;
+ * - `imageBytes`: at least one decoded image is over the per-image limit;
+ * - `cards`: more cards than one restore accepts;
+ * - `fileBytes`: the complete UTF-8 file is over the file-size limit;
+ * - `fields`: a card's ID, notes, barcode value or detected code (or a
+ *   timestamp) is longer than restore accepts.
  */
-export async function createBackup(cards: readonly LoyaltyCard[], meta: BackupMetadata): Promise<string> {
+export type RestoreLimitIssue = 'totalImageBytes' | 'imageBytes' | 'cards' | 'fileBytes' | 'fields'
+
+/** Measurements of one export, taken from the bytes actually written. */
+export interface BackupStats {
+  cards: number
+  /** Sum of decoded image bytes. */
+  totalImageBytes: number
+  /** Largest single decoded image, 0 when there are none. */
+  largestImageBytes: number
+  /** UTF-8 size of the complete JSON document. */
+  fileBytes: number
+  /** True when any card text field is longer than restore accepts. */
+  fieldTooLong: boolean
+}
+
+export interface BackupExport {
+  /** The complete document: every card, every image byte, nothing omitted. */
+  text: string
+  stats: BackupStats
+  /** Standard restore limits this file exceeds; empty when it restores directly. */
+  issues: RestoreLimitIssue[]
+}
+
+/** Lists the standard restore limits that a backup with `stats` exceeds. */
+export function assessRestoreLimits(stats: BackupStats, limits: BackupLimits = BACKUP_LIMITS): RestoreLimitIssue[] {
+  const issues: RestoreLimitIssue[] = []
+  if (stats.totalImageBytes > limits.totalImageBytes) issues.push('totalImageBytes')
+  if (stats.largestImageBytes > limits.imageBytes) issues.push('imageBytes')
+  if (stats.cards > limits.cards) issues.push('cards')
+  if (stats.fileBytes > limits.fileBytes) issues.push('fileBytes')
+  if (stats.fieldTooLong) issues.push('fields')
+  return issues
+}
+
+/**
+ * Serialises `cards` (in wallet order) as a version-1 backup document and
+ * reports which standard restore limits, if any, the result exceeds.
+ *
+ * Export never truncates, omits or recompresses anything to fit those
+ * limits: the user's complete data is always written, and the caller decides
+ * (with the user) whether to save an oversized file. Rejects with a
+ * BackupError if a stored image can't be read; a browser out-of-memory
+ * failure while building a very large document propagates unchanged.
+ */
+export async function createBackupExport(
+  cards: readonly LoyaltyCard[],
+  meta: BackupMetadata,
+  limits: BackupLimits = BACKUP_LIMITS,
+): Promise<BackupExport> {
   const exported = []
+  let totalImageBytes = 0
+  let largestImageBytes = 0
+  let fieldTooLong = false
   for (const card of cards) {
+    const barcode = await exportBarcode(card)
+    if (barcode.kind === 'image') {
+      totalImageBytes += barcode.byteLength
+      largestImageBytes = Math.max(largestImageBytes, barcode.byteLength)
+    }
+    fieldTooLong ||= exceedsFieldLimits(card, limits)
     exported.push({
       id: card.id,
       schemaVersion: card.schemaVersion,
@@ -139,10 +231,10 @@ export async function createBackup(cards: readonly LoyaltyCard[], meta: BackupMe
       ...(card.notes !== undefined ? { notes: card.notes } : {}),
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,
-      barcode: await exportBarcode(card),
+      barcode,
     })
   }
-  return JSON.stringify({
+  const text = JSON.stringify({
     format: BACKUP_FORMAT_ID,
     version: BACKUP_FORMAT_VERSION,
     exportedAt: meta.now.toISOString(),
@@ -150,6 +242,27 @@ export async function createBackup(cards: readonly LoyaltyCard[], meta: BackupMe
     order: cards.map((card) => card.id),
     cards: exported,
   })
+  const stats: BackupStats = { cards: cards.length, totalImageBytes, largestImageBytes, fileBytes: utf8ByteLength(text), fieldTooLong }
+  return { text, stats, issues: assessRestoreLimits(stats, limits) }
+}
+
+/** Serialises `cards` as a version-1 backup document (see createBackupExport). */
+export async function createBackup(cards: readonly LoyaltyCard[], meta: BackupMetadata): Promise<string> {
+  return (await createBackupExport(cards, meta)).text
+}
+
+/** True when a text field of `card` is longer than parseBackup accepts. */
+function exceedsFieldLimits(card: LoyaltyCard, limits: BackupLimits): boolean {
+  const { barcode } = card
+  return (
+    card.id.length > limits.idLength ||
+    (card.notes?.length ?? 0) > limits.notesLength ||
+    card.createdAt.length > limits.timestampLength ||
+    card.updatedAt.length > limits.timestampLength ||
+    (barcode.kind !== 'image' && barcode.value.length > limits.valueLength) ||
+    (barcode.kind === 'image' &&
+      ((barcode.detectedValue?.length ?? 0) > limits.detectedLength || (barcode.detectedFormat?.length ?? 0) > limits.detectedLength))
+  )
 }
 
 async function exportBarcode(card: LoyaltyCard) {
@@ -197,7 +310,7 @@ export async function readBackupFile(file: Blob): Promise<LoyaltyCard[]> {
  * the whole file, so a restore can never import a partial or corrupted set.
  */
 export function parseBackup(text: string, limits: BackupLimits = BACKUP_LIMITS): LoyaltyCard[] {
-  if (text.length > limits.fileBytes) throw new BackupError(TOO_LARGE)
+  if (exceedsUtf8Bytes(text, limits.fileBytes)) throw new BackupError(TOO_LARGE)
   let doc: unknown
   try {
     doc = JSON.parse(text)
@@ -276,7 +389,7 @@ function parseBarcode(raw: unknown, budget: { imageBytes: number }, limits: Back
       if (byteLength > limits.imageBytes) throw new BackupError(TOO_LARGE)
       budget.imageBytes += byteLength
       if (budget.imageBytes > limits.totalImageBytes) throw new BackupError(TOO_LARGE)
-      if (typeof data !== 'string' || data.length !== Math.ceil(byteLength / 3) * 4) throw new BackupError(DAMAGED)
+      if (typeof data !== 'string' || data.length !== base64Length(byteLength)) throw new BackupError(DAMAGED)
       const bytes = base64ToBytes(data)
       if (!bytes || bytes.byteLength !== byteLength) throw new BackupError(DAMAGED)
       // A recognisable signature must agree with the declared type. Bytes
@@ -392,6 +505,36 @@ export async function blobBytes(blob: Blob): Promise<Uint8Array> {
     reader.onerror = () => reject(reader.error ?? new Error('read failed'))
     reader.readAsArrayBuffer(blob)
   })
+}
+
+/**
+ * UTF-8 size of `text` without allocating an encoded copy (the document can
+ * be close to 100 MiB). Lone surrogates count as U+FFFD (3 bytes), as
+ * TextEncoder and Blob would write them.
+ */
+export function utf8ByteLength(text: string): number {
+  let bytes = 0
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i)
+    if (code < 0x80) bytes += 1
+    else if (code < 0x800) bytes += 2
+    else if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length && (text.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
+      bytes += 4
+      i++
+    } else bytes += 3
+  }
+  return bytes
+}
+
+/**
+ * Whether `text` is more than `maxBytes` in UTF-8. Every UTF-16 code unit
+ * takes 1 to 3 UTF-8 bytes (a surrogate pair: 2 units, 4 bytes), which
+ * settles most cases without the full count.
+ */
+function exceedsUtf8Bytes(text: string, maxBytes: number): boolean {
+  if (text.length > maxBytes) return true
+  if (text.length * 3 <= maxBytes) return false
+  return utf8ByteLength(text) > maxBytes
 }
 
 function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
