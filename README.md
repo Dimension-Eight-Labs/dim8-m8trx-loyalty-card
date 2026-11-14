@@ -7,18 +7,192 @@ The product does one job on purpose. It has **no accounts, advertisements,
 analytics, cloud backend, or synchronization**, and it loads nothing from
 third-party hosts.
 
-## Current status (v0.1.0 foundation)
+## Current status (v0.3.1 card wallet)
 
-This milestone is only the application foundation:
+Capture a physical loyalty card once, then show a clean, freshly drawn barcode
+at checkout.
 
-- React + TypeScript + Vite project.
-- Installable PWA with an offline-capable application shell.
-- Responsive home screen with an empty state and an **Add Card** button.
-- Component tests, linting, and type checking.
+- **Wallet home screen**: a grid of square, coloured tiles showing only the
+  store name. Tap a tile to open the card. Long-press (or right-click) a tile,
+  or use its small **⋯** button, for **Rename**, **Change colour**, and
+  **Delete** (with confirmation). A small **+** in the top corner adds a card.
+- **Checkout mode**: full-screen white page with the barcode as large as the
+  screen allows, the store name small at the top, and a small **×** to close.
+  Swipe left/right (or use ←/→ or the small chevrons) to move between cards;
+  navigation stops at the first/last card. Page scrolling is locked, and the
+  screen is kept awake where the browser supports it.
+- **Adding a card** — three ways:
+  - **Scan card**: live rear-camera viewfinder; decodes in the browser.
+  - **Import image**: a screenshot or photo from Photos/Files. If no barcode
+    is found automatically, crop and zoom (Wide or Square frame) and try
+    again; if it still can't be read, save the **cropped image** instead.
+  - **Enter manually**: type the exact value and pick the format; it is
+    validated (including check digits) and previewed before continuing.
 
-Not implemented yet: the card entry workflow, card storage, barcode scanning,
-and card display. Activating **Add Card** only announces "Adding cards isn’t
-available yet." It does not pretend to save anything.
+  Then check the redrawn barcode (format and exact value are shown), enter the
+  store name, pick a tile colour, and save.
+- Cards are stored on the device in IndexedDB. Existing v0.2.0 cards are
+  migrated automatically and are never deleted.
+- Dark interface, keyboard accessible; no accounts, backend, analytics, or
+  third-party requests.
+
+### v0.3.1 — scanning fixes (Iteration 4A)
+
+Fixes live scanning that showed the barcode clearly but never detected it,
+and screenshots that did not decode automatically.
+
+Root causes found (host-verified with real ZXing on synthetic images):
+
+1. **ZXing Code 128 defect.** `@zxing/library` 0.23.0's
+   `Code128Reader.findStartPattern` shrinks its 6-slot window to 4 slots
+   (`counters.slice(2)`) after the first mismatch, so Code 128 only decoded
+   when nothing dark preceded the barcode on the scanned row. Clean test
+   images passed; camera frames (card edge, hand, table, printed text) and
+   many screenshots did not. `src/features/barcodes/zxingPatches.ts` installs a
+   faithful port of the Java original; a regression test fails without it.
+   Remove the patch once upstream fixes it and that test still passes.
+2. **Single full-resolution pass per frame.** Full-resolution frames with
+   sensor-like noise defeated ZXing's QR finder and 1D readers in host
+   experiments, while a 2× box-filter downscale of the same frame decoded.
+   ZXing also cannot rotate our luminance source, so vertical barcodes were
+   never read. The scan loop now cycles bounded views per tick: guide region
+   (downscaled and native), whole frame, 90° rotation, contrast stretch, and
+   periodically every format with "try harder".
+3. **Silent loop death.** Any exception while sampling a frame ended the old
+   `setTimeout` chain with no message. Every tick now reschedules unless the
+   scan is stopped, and failures are counted by category.
+4. **Screenshots** were decoded once, after downscaling to 2000 px (iPhone
+   screenshots are up to 2868 px tall). They now decode at native resolution
+   (up to 3000 px) through a bounded cascade: original, half size, contrast
+   stretch, 90° rotation, global threshold, inverted (dark mode), quarter
+   size, rotated + contrast. The cascade stops at the first read or after 8 s;
+   the source image is never modified. Crop retries use the same cascade.
+   *Unverified for the specific UDF/Kroger screenshots*: no fixtures were
+   available in the repository, so their exact failure cause is not confirmed.
+
+Scanning behaviour:
+
+- Formats are recognised automatically. Most frames try QR, Code 128,
+  Code 39, UPC-A, EAN-13 (and EAN-8); every sixth tick tries all supported
+  formats so PDF417, Data Matrix and Aztec are found too, and unsupported
+  symbologies are explained instead of ignored.
+- Code 39 (no mandatory check character) and detect-only formats need two
+  identical reads before acceptance; other formats are accepted on one read.
+- The camera stops as soon as a result is confirmed; the result is handled
+  once, and late results after Back/Scan again are ignored.
+- After 8 s without a detection the scanner keeps scanning but shows advice
+  (distance 15–25 cm for close-focus limits, light/glare, orientation) and
+  Scan again / Import image / Enter manually. If frames arrive blank, or a
+  canvas readback probe shows altered pixels (possible with privacy features
+  such as Brave Shields' fingerprinting protection; unverified on iOS), the
+  message says so specifically.
+- **Scan details** (shown when scanning stalls or fails) lists the actual
+  frame size, the camera's reported settings, decoded area, frame/miss/error
+  counts, last error category, timings, playback state, canvas-read status and
+  whether the Code 128 fix is active. It never shows decoded values. Nothing
+  is logged in production builds; development builds log only
+  sizes/counts/step names via `console.debug`.
+
+### Barcode formats
+
+| Format      | Scan / import | Manual entry | Drawn as SVG | Notes |
+| ----------- | :-----------: | :----------: | :----------: | ----- |
+| Code 128    | ✓ | ✓ | ✓ | ASCII only. Default for manual entry. |
+| Code 39     | ✓ | ✓ | ✓ | Digits, capitals, space, `- . $ / + %` (no extended mode). |
+| EAN-13      | ✓ | ✓ | ✓ | 13 digits, check digit verified. |
+| UPC-A       | ✓ | ✓ | ✓ | 12 digits, check digit verified. |
+| EAN-8       | ✓ | ✓ | ✓ | 8 digits, check digit verified. |
+| QR code     | ✓ | ✓ | ✓ | |
+| PDF417      | ✓ | ✓ | ✓ | |
+| Data Matrix | ✓ | ✓ | ✓ | |
+| Aztec       | ✓ | ✓ | ✓ | |
+| Codabar, Code 93, ITF, UPC-E, GS1 DataBar, MaxiCode | detected only | — | — | Explained, then saved as a cropped image (import only). |
+
+Decoding uses [ZXing](https://github.com/zxing-js/library) (`@zxing/library`,
+pure JavaScript); drawing uses [bwip-js](https://github.com/metafloor/bwip-js).
+Both run locally and are precached for offline use.
+
+Exactness rules:
+
+- Values are strings and are stored **exactly** as decoded or typed — never
+  trimmed, padded, or case-changed. Leading zeros are preserved.
+- The decoded symbology is kept; the app never substitutes another format.
+- Before a barcode can be saved, the app redraws it, rasterizes the drawing in
+  memory, and decodes it again; it must read back as the same value in the
+  same format. **This proves the drawing encodes the value; it does not prove
+  that a given checkout scanner will read it from a phone screen.**
+- If a barcode can't be decoded or redrawn reliably, import offers a cropped
+  image fallback rather than losing the card. Images and camera frames are
+  processed on the device and never uploaded; camera frames are never stored.
+- Quiet zones meet or exceed each symbology's minimum (10–12 modules for 1D,
+  4 for QR) and are part of the drawn image.
+
+Known decoder behaviour: a UPC-A barcode is physically an EAN-13 barcode that
+starts with `0`. ZXing reports such codes as UPC-A (12 digits). The redrawn
+bars are identical either way. GS1-128 (Code 128 with a leading FNC1) is read
+as plain Code 128 and redrawn without the FNC1; use the image fallback if a
+store requires GS1-128.
+
+### Behaviour details and limitations
+
+- **Duplicates are allowed.** Two cards may share a store or barcode.
+- **Barcode data isn't editable.** To fix a wrong barcode, delete the card
+  and add it again. Rename and colour can be changed at any time.
+- **Order**: oldest first; renaming or recolouring never reorders tiles.
+- **Local only.** Cards exist only in this browser profile on this device.
+  There is no backup, export, or sync. Clearing site data, uninstalling the
+  PWA (on some platforms), or using a private window loses them.
+- **No storage fallback.** If IndexedDB is unavailable or fails, the app says
+  so and offers **Try again**.
+- An automatic app update reloads the page; an unsaved add-card flow open at
+  that moment is lost. Saved cards are unaffected.
+
+### Browser and device limitations
+
+- **Camera** needs a secure context (HTTPS or `localhost`) and permission. On
+  denial or absence the app explains and offers Import or Manual entry.
+  Torch and zoom controls are not offered (inconsistent support; absent on
+  iOS Safari). Continuous autofocus is requested only where the track
+  advertises it. Recent "Pro" iPhones cannot focus very close with the main
+  camera; hold cards ~15–25 cm away. All iOS browsers (including Brave) use
+  WebKit, so iPhone results apply across them, but browser privacy settings
+  can still differ.
+- **Decoding runs on the main thread** (no Web Worker yet). Each tick is
+  bounded (a single view, followed by a pause as long as the tick, between
+  120 and 400 ms), but very slow devices may feel less responsive while
+  scanning.
+- **Screen wake lock** uses the Screen Wake Lock API where available
+  (Chromium, Safari 16.4+). It is best-effort: if unsupported or refused, the
+  screen dims on its normal timer. iOS home-screen web apps reportedly ignored
+  the lock before iOS 18.4 — unverified, check on a device.
+- **Screen brightness** cannot be controlled by a web app on any platform,
+  including iPhone. Turn brightness up manually if a scanner struggles.
+- **Long-press** uses Pointer Events with a 500 ms hold and 10 px movement
+  tolerance; the iOS callout and text selection are suppressed on tiles. The
+  **⋯** button is always available as an alternative.
+- **Swipe** uses Pointer Events with `touch-action: none` on the card. In iOS
+  Safari (not installed), the system edge-swipe "back" gesture may still win
+  at the very edge of the screen.
+
+### Data model and migration
+
+Database `dim8-loyalty-card`, object store `cards` (keyed by `id`).
+
+- **Version 1** (v0.2.0): `{ id, storeName, cardNumber, notes, createdAt, updatedAt }`.
+- **Version 2** (v0.3.0): `{ id, schemaVersion: 2, storeName, color, barcode,
+  notes?, createdAt, updatedAt }` where `barcode` is one of
+  - `{ kind: 'generated', format, value }` — drawn at checkout;
+  - `{ kind: 'image', image: Blob, detectedFormat?, detectedValue? }` — cropped
+    picture fallback;
+  - `{ kind: 'text', value }` — a number without a known format.
+
+The upgrade runs inside IndexedDB's version-change transaction, so it either
+completes or leaves version 1 untouched. Each v0.2.0 card becomes a
+`text` card with its number copied exactly, a varied tile colour, and its
+notes kept (no longer shown). **No barcode format is guessed** for migrated
+cards: checkout shows the number with a note suggesting re-adding the card by
+scanning. Records the app doesn't recognize are left in place, never deleted.
+Timestamps are kept internally but never shown.
 
 ## Prerequisites
 
@@ -32,7 +206,7 @@ available yet." It does not pretend to save anything.
 | ------------------- | -------------------------------------------------------------- |
 | `npm install`       | Install dependencies.                                          |
 | `npm run dev`       | Start the dev server (service worker disabled).                |
-| `npm test`          | Run the component tests once (Vitest + Testing Library).       |
+| `npm test`          | Run the unit, component, and persistence tests once (Vitest).  |
 | `npm run test:watch`| Run the tests in watch mode.                                   |
 | `npm run lint`      | Run ESLint.                                                    |
 | `npm run typecheck` | Type-check the app and config with `tsc -b`.                   |
@@ -43,33 +217,118 @@ available yet." It does not pretend to save anything.
 ## Project structure
 
 ```
-index.html                  HTML shell: viewport, theme colour, favicon
+index.html                  HTML shell: viewport, dark theme colour, favicon
 vite.config.ts              Vite, PWA (manifest + service worker), and Vitest config
 scripts/generate-icons.mjs  Reproducible icon generator (Node built-ins only)
 public/                     Generated icons (committed outputs of `npm run icons`)
 src/
-  main.tsx                  Entry point: global styles, mounts <App />
-  app/App.tsx               Composition root: layout, wires features together
-  components/               Shared presentation components (AppHeader)
-  features/cards/           Card feature UI (CardEmptyState)
-  styles/
-    tokens.css              Design tokens: colour, spacing, type, touch-target size
-    base.css                Reset and document defaults, focus ring
-    app.css                 Layout and component styles
-  test/setup.ts             Shared test setup (jest-dom matchers, cleanup)
+  main.tsx                  Entry: global styles, IndexedDB repository, mounts <App>
+  app/App.tsx               Composition root: screen state (wallet/add/checkout),
+                            management dialogs, lazy-loads the add flow
+  components/               Shared presentation (AppHeader, Dialog, ViewHeading, icons)
+  data/
+    indexedDbCardRepository.ts  IndexedDB implementation of CardRepository + upgrades
+    cardRecords.ts              v1→v2 record migration and defensive record reading
+  features/
+    cards/                  Domain model (card.ts), tile palette, CardRepository
+                            interface, useCards controller, ColorPicker,
+                            DeleteCardDialog, CardEmptyState
+    barcodes/               formats.ts (format registry), render.ts (bwip-js SVG),
+                            rasterize.ts (pure bitmap renderer), decode.ts (ZXing),
+                            verify.ts (round-trip check), zxingPatches.ts
+                            (Code 128 library fix), bitmapTransforms.ts (pure
+                            rotate/scale/contrast), scanLoop.ts (DOM-free live
+                            scan loop), decodeCascade.ts (still-image views),
+                            canvasProbe.ts, imageSource.ts and camera.ts
+                            (browser pixel acquisition), BarcodeView
+    wallet/                 WalletScreen, CardTile, useLongPress, CardMenu
+    checkout/               CheckoutScreen, useWakeLock
+    add/                    AddCardFlow, CameraScanner, ImageImport (crop),
+                            ManualEntry, CardDetailsForm, captureServices
+  styles/                   tokens.css, base.css, app.css
+  test/setup.ts             Shared test setup
 ```
 
-Responsibilities:
+Responsibilities and dependency direction:
 
-- **`App`** owns layout and decides what happens when Add Card is activated.
-  It has no router, global state, or persistence. Those come with the features
-  that need them.
-- **`CardEmptyState`** is presentation only. It receives an `onAddCard`
-  callback, so the future card-entry workflow can be connected without
-  changing the component or coupling it to storage.
-- **`AppHeader`** is a static product header.
+- **`features/cards/card.ts`, `CardRepository.ts`, `barcodes/formats.ts`** are
+  technology-neutral; the UI depends only on the `CardRepository` interface.
+- **`barcodes/formats.ts`** is the single registry tying each format to its
+  validator, ZXing name, bwip-js encoder, label, and quiet zone. A format is
+  supported end to end or not at all.
+- **`data/`** owns every IndexedDB detail. Writes resolve only after their
+  transaction commits.
+- **`add/captureServices.ts`** is the boundary between the add flow and the
+  camera/canvas/decoder adapters, so tests inject fakes (jsdom has neither a
+  camera nor a canvas).
+- **Code splitting**: the add flow (ZXing, cropper, camera) is a lazily loaded
+  chunk; bwip-js stays in the main chunk so a tapped card renders immediately.
+  Both chunks are precached.
 
-Tests sit next to the code they cover (`*.test.tsx`).
+Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
+`@zxing/library` (Apache-2.0), `bwip-js` (MIT), `react-easy-crop` (MIT).
+
+### Testing
+
+`npm test` runs host tests in jsdom (Vitest):
+
+- **Barcodes**: real bwip-js → in-memory rasterizer → real ZXing round trips
+  for every format, leading zeros, symbology preservation, quiet zones,
+  validation and check digits.
+- **Persistence and migration**: the real repository over `fake-indexeddb`,
+  including Blob image storage and a seeded v0.2.0 database.
+- **Live scanning** (`camera.test.ts`): the scan loop with fake frames
+  (not-ready/zero-size and blank frames, thrown capture and decoder errors,
+  continued scheduling, pacing, Code 39 confirmation, exactly-once delivery,
+  idempotent stop) and the real camera adapter in jsdom with a fake stream and
+  canvas (error mapping, decode of a synthetic Code 128 scene, track cleanup,
+  bounded `play()` wait, camera interruption, canvas-read probe).
+- **Decoding**: the Code 128 fix, priority formats, decoder-error
+  classification, bitmap transforms (no source mutation), and the still-image
+  cascade (rotation, inversion, low contrast, enlarged images, time budget).
+- **App flows**: wallet, long-press, menu, rename/recolour/delete, checkout
+  close/swipe/keys/wake lock, all three capture paths, crop-retry and image
+  fallback, failure messages, scanner stall guidance, Scan again, late and
+  duplicate camera callbacks. Camera and canvas decoding are faked here.
+
+These do not prove behaviour on a phone. See the checklist below.
+
+### Real-device checklist (not verifiable in host tests)
+
+**iPhone scanning validation over HTTPS (v0.3.1).** Host tests and desktop
+browsers cannot establish iPhone behaviour; record these as real-device
+results.
+
+1. `npm run build`, then `npm run preview -- --host 0.0.0.0` (serves `dist`).
+2. Point the existing Cloudflare HTTPS tunnel at the preview port.
+3. On the iPhone, make sure the new version loaded: close and reopen the
+   installed app or tab (the service worker updates on the next load), or
+   clear the site's data in Brave. If in doubt, open Scan card, wait 8 s, and
+   check **Scan details** shows "Code 128 fix: applied" (v0.3.0 had no such
+   panel).
+4. In Brave (and Safari for comparison), open **Scan card** and scan physical
+   **QR, Code 128, Code 39, UPC-A and EAN-13** samples, in portrait and
+   landscape, barcode horizontal and vertical.
+5. On the preview screen confirm the exact value, leading zeros, and format.
+6. Confirm the camera indicator turns off after a successful scan, after
+   **Back**, and after **Scan again**.
+7. Try dim light, a slightly blurred/too-close card, off-centre placement, a
+   denied permission, and an intentionally unreadable code: after ~8 s the
+   guidance and **Scan details** must appear; nothing may sit silently.
+8. If scanning still never succeeds, open **Scan details** and note *Camera
+   frame*, *Frames checked*, *Blank frames*, *Frame / decoder errors* and
+   *Canvas reads*. Many blank frames or "Canvas reads: altered" point at
+   browser privacy protection (try Brave Shields off for the site); zero
+   frames checked with many "No picture yet" points at video playback.
+9. **Import** the original UDF and Kroger screenshots; then test a rotated
+   copy and the crop-and-retry path.
+
+- iPhone Safari and installed PWA: camera permission prompt, rear camera,
+  scanning a real card under typical light; Photos/Files import; pinch-zoom
+  in the cropper; long-press on tiles; horizontal swipe in checkout; wake lock.
+- Android Chrome: the same, plus haptic feedback on long-press.
+- **Scan the displayed barcodes with real checkout hardware** for each format
+  you rely on. A successful redraw is not proof of scanner compatibility.
 
 ## PWA and offline behaviour
 
@@ -81,8 +340,9 @@ Tests sit next to the code they cover (`*.test.tsx`).
 - All navigations fall back to the precached `index.html`.
 - There is no runtime caching, because the app requests nothing from other hosts.
 - Updates install and activate automatically (`registerType: 'autoUpdate'`).
-  This is safe while the app holds no user data. Revisit it once card editing
-  exists.
+  Saved cards live in IndexedDB and are never touched by an update; only an
+  unsaved form open during an update would be lost. This behaviour is
+  unchanged from v0.1.0; a "reload to update" prompt is a possible refinement.
 - The service worker is disabled in `npm run dev`.
 
 ### Verifying offline support manually
@@ -91,8 +351,12 @@ Tests sit next to the code they cover (`*.test.tsx`).
 2. In DevTools → **Application** → **Service workers**, confirm `sw.js` is
    activated. Under **Manifest**, confirm the name, icons, and installability.
 3. Reload once so the page is controlled by the service worker.
-4. In DevTools → **Network**, choose **Offline** and reload. The home screen
-   should still appear.
+4. Add a card or two (manual entry works without a camera).
+5. In DevTools → **Network**, choose **Offline** and reload. The app and the
+   saved cards should still appear; opening cards, adding (including the
+   decoder and cropper), renaming, and deleting still work.
+6. Close the browser completely, reopen it (still offline if you like), and
+   open the app again. The cards should still be there.
 
 On a phone, use the browser's "Install app" / "Add to Home Screen" action. PWA
 installation requires HTTPS, except on `localhost`.
@@ -104,5 +368,12 @@ are generated from the geometry and colours in `scripts/generate-icons.mjs`.
 Do not edit the PNGs by hand. Change the script and run `npm run icons`.
 Replace the artwork if authoritative DIM8 brand assets become available.
 
-The accent and background colours appear in three places. Keep them in sync:
-`src/styles/tokens.css`, `vite.config.ts`, and `index.html`.
+The icons still use the original blue accent (`#1f4fd8`) and were not
+regenerated for the dark theme; that artwork is unchanged pending brand
+assets.
+
+The page background colour (`#0e1013`) appears in three places. Keep them in
+sync: `--color-bg` in `src/styles/tokens.css`, `THEME_COLOR` /
+`BACKGROUND_COLOR` in `vite.config.ts`, and `theme-color` plus the inline
+`<html>` background in `index.html` (which prevents a light flash before the
+stylesheet loads).

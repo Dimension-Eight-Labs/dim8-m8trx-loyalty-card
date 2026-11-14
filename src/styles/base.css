@@ -25,12 +25,28 @@ body {
 }
 
 h1,
-p {
+h2,
+p,
+ul {
   margin: 0;
 }
 
-button {
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
   font: inherit;
+  color: inherit;
+}
+
+/* Headings focused programmatically on screen changes need no visible ring. */
+[tabindex='-1']:focus {
+  outline: none;
 }
 
 :focus-visible {

@@ -9,9 +9,12 @@
  *   is served offline regardless of the requested path.
  * - No runtime caching is configured: the app loads nothing from external hosts,
  *   and there is no backend. Add runtime routes only when a feature needs them.
- * - `autoUpdate` activates a new service worker as soon as it is installed. The
- *   app holds no in-progress user data yet, so a silent update is safe. Revisit
- *   this (e.g. a "reload to update" prompt) once card editing exists.
+ * - `autoUpdate` activates a new service worker as soon as it is installed.
+ *   Saved cards live in IndexedDB, which a service-worker update never
+ *   touches. The only exposure is an unsaved form if an update reloads the
+ *   page mid-edit; that is accepted for now (forms are short) and kept
+ *   unchanged to preserve the existing PWA behaviour. A "reload to update"
+ *   prompt remains a possible future refinement.
  * - The service worker is disabled in `npm run dev`; verify offline behaviour
  *   with `npm run build && npm run preview`.
  */
@@ -19,10 +22,11 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// Single source for the colours shared by the manifest and index.html.
-// Keep in sync with --color-bg / --color-accent in src/styles/tokens.css.
-const THEME_COLOR = '#1f4fd8'
-const BACKGROUND_COLOR = '#f6f6f3'
+// Colours shared by the manifest and index.html. The app is dark-first, so the
+// browser/OS chrome and splash screen use the page background colour.
+// Keep in sync with --color-bg in src/styles/tokens.css and index.html.
+const THEME_COLOR = '#0e1013'
+const BACKGROUND_COLOR = '#0e1013'
 
 export default defineConfig({
   plugins: [

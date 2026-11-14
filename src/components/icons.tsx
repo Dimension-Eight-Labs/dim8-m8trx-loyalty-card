@@ -1,0 +1,30 @@
+/**
+ * Small inline SVG icons. All are decorative (aria-hidden); every control
+ * that uses one also has a visible text label or an aria-label.
+ */
+function Icon({ path }: { path: string }) {
+  return (
+    <svg className="button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d={path} fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export const PlusIcon = () => <Icon path="M12 5v14M5 12h14" />
+export const BackIcon = () => <Icon path="M15 5l-7 7 7 7" />
+export const ChevronIcon = () => <Icon path="M9 5l7 7-7 7" />
+export const TrashIcon = () => <Icon path="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+export const CloseIcon = () => <Icon path="M6 6l12 12M18 6L6 18" />
+export const CameraIcon = () => <Icon path="M4 8h3l2-3h6l2 3h3v11H4zM12 16.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+export const ImageIcon = () => <Icon path="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
+export const KeyboardIcon = () => <Icon path="M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14h8" />
+export const CheckIcon = () => <Icon path="M5 12.5l4.5 4.5L19 7.5" />
+
+/** Three dots; filled circles read better than strokes at small sizes. */
+export const MoreIcon = () => (
+  <svg className="button__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx="5" cy="12" r="2" fill="currentColor" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" />
+    <circle cx="19" cy="12" r="2" fill="currentColor" />
+  </svg>
+)

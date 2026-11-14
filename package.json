@@ -1,7 +1,7 @@
 {
   "name": "dim8-loyalty-card",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.1",
   "description": "Minimalist, offline-capable PWA for storing and displaying loyalty and membership cards.",
   "type": "module",
   "engines": {
@@ -18,8 +18,11 @@
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "@zxing/library": "^0.23.0",
+    "bwip-js": "^4.11.4",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-easy-crop": "^6.2.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -33,6 +36,7 @@
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
+    "fake-indexeddb": "^6.2.8",
     "globals": "^17.14.0",
     "jsdom": "^31.0.1",
     "typescript": "~6.0.3",
