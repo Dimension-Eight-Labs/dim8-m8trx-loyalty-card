@@ -27,6 +27,15 @@ export interface CardRepository {
    * or the previous one remains. Card records themselves are not rewritten.
    */
   reorder(orderedIds: readonly string[]): Promise<void>
+  /**
+   * Adds already-complete cards (from a validated backup) after the existing
+   * cards, in the given order, keeping their IDs, timestamps and barcode data
+   * exactly. All-or-nothing: if any card is invalid, any ID is already in
+   * use, storage fails, or the wallet no longer matches `expectedOrder` (the
+   * card IDs, in wallet order, that the caller planned against), it rejects
+   * and nothing is stored. Existing cards are never modified or removed.
+   */
+  importCards(cards: readonly LoyaltyCard[], expectedOrder: readonly string[]): Promise<void>
 }
 
 /** Rejection used when input fails domain validation. */

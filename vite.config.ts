@@ -17,19 +17,26 @@
  *   prompt remains a possible future refinement.
  * - The service worker is disabled in `npm run dev`; verify offline behaviour
  *   with `npm run build && npm run preview`.
+ * - Images imported by application code (the DIM8 logo) are emitted under
+ *   dist/assets/ with hashed names and precached by the `assets/**` pattern
+ *   below, so branding still renders offline.
+ *
+ * Manifest data (names, colours, icons) lives in src/app/pwaManifest.ts so a
+ * host test can verify it; `__APP_VERSION__` exposes package.json's version
+ * to the app (see src/app/appMetadata.ts).
  */
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { PWA_MANIFEST } from './src/app/pwaManifest.ts'
 
-// Colours shared by the manifest and index.html. The app is dark-first, so the
-// browser/OS chrome and splash screen use the page background colour.
-// Keep in sync with --color-bg (the official DIM8 background, --dim8-bg) in
-// src/styles/tokens.css and index.html.
-const THEME_COLOR = '#010100'
-const BACKGROUND_COLOR = '#010100'
+const packageJson = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')) as { version: string }
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(packageJson.version),
+  },
   plugins: [
     react(),
     VitePWA({
@@ -40,33 +47,13 @@ export default defineConfig({
       // Static files precached in addition to the build output. Manifest icons
       // and the manifest itself are added automatically by the plugin.
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
-      manifest: {
-        id: '/',
-        name: 'DIM8 Loyalty Card',
-        short_name: 'Loyalty Card',
-        description: 'Store and display your loyalty and membership cards.',
-        lang: 'en',
-        start_url: '/',
-        scope: '/',
-        display: 'standalone',
-        orientation: 'portrait',
-        theme_color: THEME_COLOR,
-        background_color: BACKGROUND_COLOR,
-        icons: [
-          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          {
-            src: 'maskable-icon-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-        ],
-      },
+      manifest: { ...PWA_MANIFEST, icons: PWA_MANIFEST.icons.map((icon) => ({ ...icon })) },
       workbox: {
         // Build output only; public/ assets come from includeAssets and the
         // manifest icons, which avoids duplicate precache entries.
-        globPatterns: ['**/*.{js,css,html}'],
+        // dist/assets/ holds only Vite-emitted files, so adding its images
+        // (the bundled DIM8 logo) does not duplicate the public/ icons.
+        globPatterns: ['**/*.{js,css,html}', 'assets/**/*.{png,webp}'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
       },

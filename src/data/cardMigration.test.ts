@@ -228,6 +228,41 @@ describe('v0.3.x → v0.4.0 (schema 2 → 3) wallet-order migration', () => {
   })
 })
 
+describe('v0.4.2 → v0.5.0 (no schema change)', () => {
+  /** A version-3 database exactly as v0.4.x wrote it, with a manual order. */
+  function seedV3(records: unknown[], order: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const request = factory.open(DEFAULT_DB_NAME, 3)
+      request.onupgradeneeded = () => {
+        const store = request.result.createObjectStore('cards', { keyPath: 'id' })
+        request.result.createObjectStore('meta').put(order, 'walletOrder')
+        for (const record of records) store.add(record)
+      }
+      request.onsuccess = () => {
+        request.result.close()
+        resolve()
+      }
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  it('opens an existing wallet unchanged: same version, records, and manual order', async () => {
+    const records = [
+      v2Card('a', 'First', '2026-01-01T00:00:00.000Z'),
+      v2Card('b', 'Second', '2026-02-01T00:00:00.000Z'),
+      v2Card('c', 'Third', '2026-03-01T00:00:00.000Z'),
+    ]
+    await seedV3(records, ['c', 'a', 'b'])
+    const repo = createIndexedDbCardRepository({ indexedDB: factory })
+    expect((await repo.list()).map((card) => card.storeName)).toEqual(['Third', 'First', 'Second'])
+    repo.close()
+    const raw = await readRaw()
+    expect(raw.version).toBe(3)
+    expect(raw.records).toEqual(records)
+    await expect(readOrder()).resolves.toEqual(['c', 'a', 'b'])
+  })
+})
+
 describe('record helpers', () => {
   it('recognizes v1 records only', () => {
     expect(isV1Record(v1Records[0])).toBe(true)

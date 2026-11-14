@@ -6,7 +6,7 @@
  */
 import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { NewCardInput } from '../features/cards/card.ts'
+import type { LoyaltyCard, NewCardInput } from '../features/cards/card.ts'
 import { CardNotFoundError, CardValidationError } from '../features/cards/CardRepository.ts'
 import { createIndexedDbCardRepository, DEFAULT_DB_NAME, type IndexedDbCardRepositoryOptions } from './indexedDbCardRepository.ts'
 
@@ -402,5 +402,125 @@ describe('wallet order (v0.4.0)', () => {
     await repo.reorder([c.id, b.id, a.id])
     const after = await repo.list()
     expect(after).toEqual([before[2], before[1], before[0]])
+  })
+})
+
+describe('backup restore: importCards (v0.5.0)', () => {
+  // Card validation checks `instanceof Blob`; use Node's (storable) Blob throughout.
+  beforeEach(() => {
+    vi.stubGlobal('Blob', NodeBlob)
+  })
+
+  const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 7, 0, 255, 128]
+
+  /** Complete cards as a parsed backup supplies them (IDs and timestamps from the source device). */
+  function backupCards(): LoyaltyCard[] {
+    return [
+      {
+        id: 'b-qr-art',
+        schemaVersion: 2,
+        storeName: 'Logo Shop',
+        color: 'purple',
+        barcode: { kind: 'image', image: new NodeBlob([new Uint8Array(PNG)], { type: 'image/png' }), detectedFormat: 'QR code', detectedValue: ' Gold ' },
+        createdAt: '2025-05-01T00:00:00.000Z',
+        updatedAt: '2025-06-01T00:00:00.000Z',
+      },
+      {
+        id: 'b-linear',
+        schemaVersion: 2,
+        storeName: 'Grocer',
+        color: 'green',
+        barcode: { kind: 'generated', format: 'ean13', value: '4006381333931' },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'b-text',
+        schemaVersion: 2,
+        storeName: 'Library',
+        color: 'slate',
+        barcode: { kind: 'text', value: '000123' },
+        notes: 'Stamp card',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      },
+    ]
+  }
+
+  async function bytes(card: LoyaltyCard | undefined) {
+    if (card?.barcode.kind !== 'image') throw new Error('not an image card')
+    return Array.from(new Uint8Array(await card.barcode.image.arrayBuffer()))
+  }
+
+  it('imports into an empty wallet, keeping IDs, timestamps, notes, artwork bytes and backup order', async () => {
+    const repo = makeRepository()
+    await repo.importCards(backupCards(), [])
+    repo.close()
+
+    // Read back through a fresh instance, as after an app restart.
+    const listed = await makeRepository().list()
+    expect(listed.map((card) => card.id)).toEqual(['b-qr-art', 'b-linear', 'b-text'])
+    expect(listed[1]).toEqual(backupCards()[1])
+    expect(listed[2]).toMatchObject({ notes: 'Stamp card', createdAt: '2024-01-01T00:00:00.000Z' })
+    expect(listed[0]?.barcode).toMatchObject({ kind: 'image', detectedFormat: 'QR code', detectedValue: ' Gold ' })
+    expect(await bytes(listed[0])).toEqual(PNG)
+    await expect(readStoredOrder()).resolves.toEqual(['b-qr-art', 'b-linear', 'b-text'])
+  })
+
+  it('appends after existing cards without changing them', async () => {
+    const repo = makeRepository({ generateId: () => 'mine' })
+    const mine = await repo.create(coffee)
+    await repo.importCards(backupCards().slice(1), [mine.id])
+
+    const listed = await repo.list()
+    expect(listed.map((card) => card.id)).toEqual(['mine', 'b-linear', 'b-text'])
+    expect(listed[0]).toEqual(mine)
+  })
+
+  it('refuses, storing nothing, when the wallet changed since the restore was planned', async () => {
+    const repo = makeRepository({ generateId: () => 'mine' })
+    await repo.create(coffee)
+    await expect(repo.importCards(backupCards(), [])).rejects.toThrow(/changed while restoring/)
+    await expect(repo.list()).resolves.toHaveLength(1)
+    await expect(readStoredOrder()).resolves.toEqual(['mine'])
+  })
+
+  it('never overwrites an existing record with the same ID, even one this version cannot read', async () => {
+    const repo = makeRepository()
+    await repo.list() // creates the database
+    await rawWrite((tx) => tx.objectStore('cards').put({ id: 'b-text', schemaVersion: 99 }))
+    await expect(repo.importCards(backupCards(), [])).rejects.toThrow(/Nothing was imported/)
+    await expect(repo.list()).resolves.toEqual([])
+  })
+
+  it('rejects invalid or duplicated cards before touching storage', async () => {
+    const repo = makeRepository()
+    const [first] = backupCards()
+    await expect(repo.importCards([first!, first!], [])).rejects.toBeInstanceOf(CardValidationError)
+    await expect(repo.importCards([{ ...first!, color: 'nope' }], [])).rejects.toBeInstanceOf(CardValidationError)
+    await expect(repo.importCards([{ ...first!, storeName: '' }], [])).rejects.toBeInstanceOf(CardValidationError)
+    await expect(repo.list()).resolves.toEqual([])
+  })
+
+  it('rolls back every card if storage fails part-way through (interrupted restore)', async () => {
+    const repo = makeRepository({ generateId: () => 'mine' })
+    const mine = await repo.create(coffee)
+    const { IDBObjectStore: FakeStore } = await import('fake-indexeddb')
+    const realAdd = FakeStore.prototype.add
+    let calls = 0
+    const spy = vi.spyOn(FakeStore.prototype, 'add').mockImplementation(function (this: IDBObjectStore, ...args) {
+      calls += 1
+      // The first card is added, then storage "fails" on the second.
+      if (calls === 2) throw new DOMException('Simulated quota failure', 'QuotaExceededError')
+      return realAdd.apply(this, args)
+    })
+    try {
+      await expect(repo.importCards(backupCards(), [mine.id])).rejects.toThrow(/Couldn’t restore the backup/)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(calls).toBe(2)
+    await expect(repo.list()).resolves.toEqual([mine])
+    await expect(readStoredOrder()).resolves.toEqual(['mine'])
   })
 })

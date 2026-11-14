@@ -1,13 +1,14 @@
-# DIM8 Loyalty Card
+# M8TRX
 
-A minimalist, mobile-first, installable Progressive Web App (PWA) for storing
-and displaying loyalty and membership cards.
+**M8TRX by DIM8 Labs** — a minimalist, mobile-first, installable Progressive
+Web App (PWA) for storing and displaying loyalty and membership cards.
+Developed by Dimension Eight Labs LLC (<https://dim8labs.com>).
 
 The product does one job on purpose. It has **no accounts, advertisements,
 analytics, cloud backend, or synchronization**, and it loads nothing from
 third-party hosts.
 
-## Current status (v0.4.2 card wallet, development)
+## Current status (v0.5.0, development)
 
 Capture a physical loyalty card once, then show a clean, freshly drawn barcode
 at checkout.
@@ -21,7 +22,9 @@ at checkout.
   opens **Rename**, **Change colour**, **Move earlier / later / to first /
   to last** (the keyboard-accessible way to reorder), and **Delete** (with
   confirmation). A small **+** in the top corner adds a card.
-- **Checkout mode**: an **M8TRX** title at the top, then the store name
+- **Shared M8TRX header** on every screen: the official DIM8 logo and
+  **M8TRX** in the upper-left corner.
+- **Checkout mode**: the shared M8TRX header at the top, then the store name
   (in the DIM8 VFD colour) immediately above the card, which floats as a
   centred white tile (thin bands in the card's colour, barcode scaled to
   fit) on a dark stage with the subtle M8TRX circuit backdrop. Linear codes
@@ -44,10 +47,127 @@ at checkout.
 
   Then check the redrawn barcode (format and exact value are shown), enter the
   store name, pick a tile colour, and save.
+- **Backup and restore** (bottom of the Add Card screen): **Export all
+  cards** writes one portable `.m8trx` file; **Restore from backup** adds
+  the cards from such a file after a confirmation. **About** shows the
+  version and product information.
 - Cards are stored on the device in IndexedDB. Existing v0.2.0 cards are
   migrated automatically and are never deleted.
 - Dark interface in the official DIM8 Labs palette, keyboard accessible; no accounts, backend, analytics, or
   third-party requests.
+
+### v0.5.0 — Final branding, About, and backup/restore (Iteration 4F)
+
+Development version; not published or deployed.
+
+- **Shared M8TRX header** (`components/AppHeader.tsx`): the official DIM8
+  logo immediately left of **M8TRX**, upper left, on the wallet, Add Card,
+  About and checkout, with identical position, size and typography (shared
+  `.app-header` / `.brand-lockup` CSS and `--brand-*` tokens). The title is
+  1.25 rem (between the old 0.875 rem wallet label and the old 1.75–2.5 rem
+  checkout title) in the DIM8 primary VFD colour with a soft VFD glow. The
+  home screen no longer says "Loyalty Card". The **+** and **×** buttons
+  keep their 48 px targets. Checkout's top bar adds the same safe-area
+  offsets as the wallet shell, so on notched iPhones (top inset ≥ 16 px)
+  its height is unchanged and the card does not move (CSS-derived; on
+  screens without a top inset the stage starts 16 px lower).
+- **Brand typography**: `--font-segment` is the single typography hook for
+  the product name. Iteration 4F's approved target is the DIM8 wordmark
+  stack (`"Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif`). The
+  official seven-segment font is **deferred by decision**: when its licensed
+  webfont is supplied, add an `@font-face` rule and prefix its family in
+  `tokens.css`; no layout change is needed.
+- **Official logo**: the supplied artwork is kept unmodified in
+  `assets/brand/dim8-vfd-logo.png`. `npm run icons` derives two small PNGs
+  (`src/assets/brand/dim8-logo-120.png` / `-240.png`) by trimming the black
+  canvas and area-averaging down — no redraw, recolour or aspect change. The
+  logo is drawn with `mix-blend-mode: screen` so its black canvas disappears
+  over the dark background. Both files are precached for offline use.
+- **About** (Add Card → About): logo, M8TRX, "by DIM8 Labs", the version
+  (from `package.json` via Vite's `define`, `src/app/appMetadata.ts`), a
+  link to <https://dim8labs.com>, the product description and
+  "© 2026 Dimension Eight Labs LLC. All rights reserved." The Add Card
+  screen ends with "© 2026 Dimension Eight Labs LLC".
+- **PWA identity**: new icons (dark DIM8 background, decorative VFD barcode
+  above geometric M8TRX lettering, inside the maskable safe zone), manifest
+  name/short name **M8TRX**, description with "by DIM8 Labs", page title and
+  `apple-mobile-web-app-title` **M8TRX**. Theme/background stay `#010100`.
+  Manifest data lives in `src/app/pwaManifest.ts`.
+- **Backup and restore** — see [Backup format and restore policy](#backup-format-and-restore-policy).
+- No IndexedDB schema change (still `dim8-loyalty-card` version 3); no new
+  dependencies. The repository interface gained one method, `importCards`.
+
+Checked in headless desktop Firefox at 390×844 (wallet, Add Card, About,
+linear and QR checkout, via a temporary harness). **Not yet checked on an
+iPhone** — see the v0.5.0 checklist below.
+
+### Backup format and restore policy
+
+**Format** (`src/features/backup/backupFormat.ts`, version 1). One UTF-8
+JSON file named `m8trx-backup-YYYY-MM-DD.m8trx`:
+
+```json
+{
+  "format": "m8trx-backup",
+  "version": 1,
+  "exportedAt": "2026-11-14T18:00:00.000Z",
+  "app": { "name": "M8TRX", "version": "0.5.0" },
+  "order": ["<card id>", "..."],
+  "cards": [
+    {
+      "id": "…", "schemaVersion": 2, "storeName": "…", "color": "teal",
+      "notes": "…", "createdAt": "…", "updatedAt": "…",
+      "barcode": { "kind": "generated", "format": "code128", "value": "…" }
+    },
+    {
+      "…": "…",
+      "barcode": { "kind": "image", "mimeType": "image/png", "byteLength": 1234,
+                   "data": "<base64>", "detectedFormat": "QR code", "detectedValue": "…" }
+    }
+  ]
+}
+```
+
+- JSON rather than ZIP: no archive dependency, no file paths inside the file
+  (so no path traversal) and no decompression bombs, while still one
+  portable file.
+- Card records are copied field for field (IDs, names, colours, notes,
+  timestamps). Barcode values are never trimmed. Saved artwork is base64 of
+  the **exact stored bytes** — never redrawn, resized or recompressed.
+  Generated barcodes are stored as format + value, as in the wallet.
+- `order` is the wallet order and must name every card exactly once.
+
+**Export** reads the stored wallet, builds the file on the device, then a
+**Save backup** button hands it to the system share sheet (iOS: *Save to
+Files* → iCloud Drive, AirDrop, …) where the Web Share API accepts files, or
+downloads it otherwise. Two taps, because iOS only allows sharing from a
+direct tap and building the file is asynchronous. Nothing is uploaded.
+
+**Restore** opens the file picker (no `accept` filter, because iOS greys out
+unknown extensions such as `.m8trx`), then, before anything is written:
+
+1. checks the file size (≤ 64 MiB) before reading it;
+2. validates the whole document: format id, version (newer versions are
+   refused with an "update the app" message), every field, colours,
+   barcode values (including check digits), timestamps, image type, strict
+   base64, declared vs decoded size, and a file signature that must agree
+   with the declared type; ≤ 1000 cards, ≤ 4 MiB per image and ≤ 40 MiB of
+   images in total (declared sizes are checked before decoding);
+3. compares it with the stored wallet and shows a confirmation with the
+   card count, how many will be added, and which are skipped.
+
+Policy — the only mode, and it never deletes or overwrites:
+
+- **Duplicate** (skipped): the wallet already has the same barcode — same
+  format + value, same detected format + value for saved artwork, or
+  identical image bytes — under any ID; or the same ID with the same barcode.
+- **Conflict** (skipped): the same ID is used by a different card.
+- Everything else is **appended after the existing cards in backup order**.
+
+The import is **one IndexedDB transaction**: it re-checks that the wallet
+still matches what the confirmation showed (another tab may have changed
+it), adds cards with `add` (never `put`) and extends `walletOrder`. Any
+failure rolls back every card, so a restore is all-or-nothing.
 
 ### v0.4.2 — QR sizing, checkout layout and DIM8 palette (Iteration 4E)
 
@@ -87,8 +207,8 @@ Development version; not published or deployed.
   its geometry and opacities but is drawn in the VFD colour; browser/PWA
   theme colours follow the new background. Loyalty-card colours, card
   artwork and barcodes are unchanged.
-- The DIM8 logo, seven-segment font and app icons are deferred to the final
-  branding pass (the icons still use the original placeholder artwork).
+- The DIM8 logo, seven-segment font and app icons were deferred to the
+  final branding pass (done in v0.5.0, except the seven-segment font).
 - No IndexedDB schema change; no new dependencies.
 
 Checked in headless desktop Firefox at 320×568, 375×667, 390×844 and
@@ -430,13 +550,19 @@ Timestamps are kept internally but never shown.
 ```
 index.html                  HTML shell: viewport, dark theme colour, favicon
 vite.config.ts              Vite, PWA (manifest + service worker), and Vitest config
-scripts/generate-icons.mjs  Reproducible icon generator (Node built-ins only)
+scripts/generate-icons.mjs  Reproducible icon + logo-derivative generator (Node built-ins only)
 public/                     Generated icons (committed outputs of `npm run icons`)
+assets/brand/               Official DIM8 logo source artwork (unmodified, not bundled)
 src/
   main.tsx                  Entry: global styles, IndexedDB repository, mounts <App>
-  app/App.tsx               Composition root: screen state (wallet/add/checkout),
-                            management dialogs, lazy-loads the add flow
-  components/               Shared presentation (AppHeader, Dialog, ViewHeading, icons)
+  app/App.tsx               Composition root: screen state (wallet/add/about/checkout),
+                            management + restore dialogs, lazy-loads the add flow
+  app/AddCardFooter.tsx     Add Card footer: Backup, About, copyright
+  app/appMetadata.ts        Product name, version (from package.json), legal copy
+  app/pwaManifest.ts        Web app manifest data and theme colours
+  assets/brand/             Generated DIM8 logo derivatives (bundled, precached)
+  components/               Shared presentation (AppHeader + BrandLockup, Dialog,
+                            ViewHeading, icons)
   data/
     indexedDbCardRepository.ts  IndexedDB implementation of CardRepository + upgrades
     cardRecords.ts              v1→v2 record migration and defensive record reading
@@ -458,6 +584,9 @@ src/
     checkout/               CheckoutScreen, gesture.ts (swipe rules), useWakeLock
     add/                    AddCardFlow, CameraScanner, ImageImport (crop),
                             ManualEntry, CardDetailsForm, captureServices
+    backup/                 backupFormat.ts (format, validation, restore plan),
+                            BackupControls, RestoreDialog, saveFile.ts (share/download)
+    about/                  AboutView
   styles/                   tokens.css, base.css, app.css
   test/setup.ts             Shared test setup
   test/node/png.ts          Minimal PNG reader for host tests (Node only)
@@ -510,6 +639,18 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
   values, original-first ordering, QR-sweep recovery of the native-resolution
   failures, no cropping of views, and weak-read handling. Only the browser
   canvas step is replaced.
+- **Backup/restore (v0.5.0)**: `backupFormat.test.ts` (round trips of
+  generated, text, linear, QR and saved-artwork cards with exact bytes and
+  order; malformed JSON/base64, mislabelled or oversized images, newer
+  versions, broken order, card/size limits; duplicate/conflict planning),
+  repository `importCards` (empty and non-empty wallets, stale wallet,
+  ID collisions, a simulated storage failure mid-import leaving storage
+  unchanged), the v0.4.2 → v0.5.0 upgrade leaving data untouched, and App
+  flows (header, About, export, restore on "another device", duplicates,
+  rejected files, failed save, share-sheet cancel).
+- **PWA identity** (`pwaAssets.node.test.ts`): manifest names/colours, icon
+  files at their declared pixel sizes, index.html metadata, version from
+  `package.json`, logo derivatives.
 - **Wallet/checkout UI**: tile preview variants (no value encoded, artwork
   object URLs revoked), palette contrast ≥ 4.5:1, checkout card structure
   (name above pagination, barcode inside the card, accent local to the card),
@@ -524,6 +665,29 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
 These do not prove behaviour on a phone. See the checklist below.
 
 ### Real-device checklist (not verifiable in host tests)
+
+**v0.5.0 physical-iPhone acceptance (Iteration 4F).** None of these have
+been performed yet; record results per item.
+
+1. Wallet and checkout show the DIM8 logo and M8TRX at the same place and
+   size, clear of the notch/Dynamic Island; + and × are easy to tap.
+2. The M8TRX title renders in the approved wordmark typography (Avenir Next
+   on iOS) in the VFD colour (the seven-segment font is deferred).
+3. Add Card → About entry, About page, and the copyright line are readable;
+   the copyright clears the home indicator; the page scrolls on an SE.
+4. Remove and re-add the PWA to the Home Screen; the new M8TRX icon shows
+   (iOS caches icons; a reinstall may be needed).
+5. Export all cards → Save backup → Save to Files → iCloud Drive; the file
+   appears with today's date.
+6. On the same or another iPhone (or after removing the site data),
+   Add Card → Restore from backup → pick the file in Files; confirm the
+   summary, then the restored wallet.
+7. A card saved with **Keep original artwork** shows the identical artwork
+   after restore.
+8. A manually arranged tile order is preserved after restore.
+9. Linear and QR codes from restored cards scan at a real checkout scanner.
+10. In airplane mode, relaunch the installed app: the wallet, checkout,
+    About and export (to Files "On My iPhone") still work.
 
 **iPhone scanning validation over HTTPS (v0.3.1).** Host tests and desktop
 browsers cannot establish iPhone behaviour; record these as real-device
@@ -663,18 +827,18 @@ installation requires HTTPS, except on `localhost`.
 
 ## Icons
 
-The icons are placeholder artwork: a stylised card on the accent colour. They
-are generated from the geometry and colours in `scripts/generate-icons.mjs`.
-Do not edit the PNGs by hand. Change the script and run `npm run icons`.
-Replace the artwork if authoritative DIM8 brand assets become available.
-
-The icons still use the original blue accent (`#1f4fd8`) and were not
-regenerated for the dark theme; that artwork is unchanged pending brand
-assets.
+The M8TRX icons (Iteration 4F) are generated by `scripts/generate-icons.mjs`
+(`npm run icons`, Node built-ins only, byte-for-byte reproducible): a dark
+DIM8 background, a small decorative VFD barcode (encodes nothing), and
+geometric M8TRX lettering drawn as strokes in the script (no font file; not
+an imitation of the deferred seven-segment font), all inside the maskable
+safe zone. The same run derives the in-app logo images from the official
+artwork in `assets/brand/`. Do not edit the PNGs by hand. Change the script
+and run `npm run icons`.
 
 The page background colour (`#010100`, the official DIM8 background)
 appears in three places. Keep them in
-sync: `--color-bg` in `src/styles/tokens.css`, `THEME_COLOR` /
-`BACKGROUND_COLOR` in `vite.config.ts`, and `theme-color` plus the inline
-`<html>` background in `index.html` (which prevents a light flash before the
-stylesheet loads).
+sync: `--color-bg` / `--dim8-bg` in `src/styles/tokens.css`, `THEME_COLOR` /
+`BACKGROUND_COLOR` in `src/app/pwaManifest.ts`, and `theme-color` plus the
+inline `<html>` background in `index.html` (which prevents a light flash
+before the stylesheet loads). `src/app/pwaAssets.node.test.ts` checks this.

@@ -13,6 +13,9 @@
  *   are appended; rename/recolour keep their position; `reorderCards` saves
  *   a whole new order and applies it only once storage confirms it, so a
  *   failed save leaves the previous order on screen.
+ * - `importCards` (backup restore) commits the whole set atomically, then
+ *   reloads the list from storage so the screen shows exactly what was
+ *   stored. `loadSnapshot` reads the stored wallet afresh for export.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CardChanges, LoyaltyCard, NewCardInput } from './card.ts'
@@ -32,12 +35,17 @@ export interface UseCardsResult {
   deleteCard: (id: string) => Promise<MutationResult<void>>
   /** Saves a new order; `orderedIds` must be a permutation of the current cards' IDs. */
   reorderCards: (orderedIds: readonly string[]) => Promise<MutationResult<void>>
+  /** Adds restored cards after the current ones; resolves to the number added. */
+  importCards: (cards: readonly LoyaltyCard[], expectedOrder: readonly string[]) => Promise<MutationResult<number>>
+  /** The stored wallet, in order, read afresh (for backup export). Rejects with a user-presentable Error. */
+  loadSnapshot: () => Promise<LoyaltyCard[]>
 }
 
 const FALLBACK_LOAD_ERROR = 'Couldn’t load your cards.'
 const FALLBACK_SAVE_ERROR = 'Something went wrong. Your card wasn’t changed.'
 const STALE_ORDER_ERROR = 'Your cards changed while reordering. Please try again.'
 const FALLBACK_ORDER_ERROR = 'Couldn’t save the new card order.'
+const FALLBACK_IMPORT_ERROR = 'Couldn’t restore the backup. Nothing was imported.'
 
 export function useCards(repository: CardRepository): UseCardsResult {
   const [status, setStatus] = useState<CardsStatus>('loading')
@@ -140,7 +148,28 @@ export function useCards(repository: CardRepository): UseCardsResult {
     [repository],
   )
 
-  return { status, cards, loadError, reload, createCard, updateCard, deleteCard, reorderCards }
+  const importCards = useCallback(
+    async (imported: readonly LoyaltyCard[], expectedOrder: readonly string[]): Promise<MutationResult<number>> => {
+      try {
+        await repository.importCards(imported, expectedOrder)
+      } catch (error) {
+        return { ok: false, message: messageOf(error, FALLBACK_IMPORT_ERROR) }
+      }
+      try {
+        setCards(await repository.list())
+      } catch {
+        // The import is committed; if re-reading fails, show what we know
+        // was stored (the same order the repository wrote).
+        setCards((current) => [...current, ...imported])
+      }
+      return { ok: true, value: imported.length }
+    },
+    [repository],
+  )
+
+  const loadSnapshot = useCallback(() => repository.list(), [repository])
+
+  return { status, cards, loadError, reload, createCard, updateCard, deleteCard, reorderCards, importCards, loadSnapshot }
 }
 
 function isPermutationOf(ids: readonly string[], cards: readonly LoyaltyCard[]): boolean {

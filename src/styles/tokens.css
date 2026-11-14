@@ -83,12 +83,22 @@
   /* Official DIM8 wordmark font stack. */
   --font-wordmark: 'Avenir Next', 'Segoe UI', Helvetica, Arial, sans-serif;
   /*
-   * Typography hook for the official DIM8 seven-segment font, used by the
-   * M8TRX header. The font is not in this repository yet and must not be
-   * substituted; until it is supplied (with an @font-face rule) this falls
-   * back to the wordmark stack. Integrate it by prefixing its family here.
+   * Brand typography for the M8TRX product name (shared header, About).
+   * Iteration 4F's approved target is the DIM8 wordmark stack above. The
+   * official DIM8 seven-segment font is deferred: when its licensed webfont
+   * is supplied, add an @font-face rule and prefix its family here. No
+   * layout change is needed; nothing else names a font for the brand.
    */
   --font-segment: var(--font-wordmark);
+  /*
+   * Shared M8TRX header lockup. The title sits between the old wallet label
+   * (0.875rem) and the old checkout title (1.75-2.5rem), so it is
+   * recognisable without competing with the cards. The logo height is set
+   * here; its width follows from the artwork's own proportions.
+   */
+  --brand-title-size: 1.25rem;
+  --brand-title-tracking: 0.16em;
+  --brand-logo-height: 2rem;
   /* Card numbers: monospace so similar glyphs (0/O, 1/l) line up and are easy to read aloud. */
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
   --font-size-xs: 0.8125rem;

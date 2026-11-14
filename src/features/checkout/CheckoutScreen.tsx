@@ -1,10 +1,13 @@
 /**
  * Checkout mode: one card, presented as a floating tile on a dark stage.
  *
- * Layout (v0.4.2), top to bottom:
- * - Top bar: the M8TRX header centred, balanced by an empty spacer the same
- *   width as the × (close) button on the right. The header is decorative
- *   branding (aria-hidden); the dialog is still labelled by the card name.
+ * Layout (v0.5.0), top to bottom:
+ * - Top bar: the shared M8TRX header (components/AppHeader.tsx): DIM8 logo
+ *   and M8TRX in the upper-left corner, exactly as on the wallet, with the
+ *   × (close) button on the right. The lockup is decorative branding
+ *   (aria-hidden); the dialog is still labelled by the card name. Iteration
+ *   4F replaced the larger, centred v0.4.2 title; on notched iPhones the top
+ *   bar keeps its previous height, so the stage and card do not move.
  * - The stage: the subtle M8TRX backdrop (shared with the wallet, see
  *   app.css) with the card group centred on it. The group is the store name
  *   (the dialog's label, in the app font and DIM8 brand colour) immediately
@@ -53,6 +56,7 @@
  * - pointercancel (the browser or OS took the gesture) never acts.
  */
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
+import { AppHeader } from '../../components/AppHeader.tsx'
 import { BackIcon, ChevronIcon, CloseIcon } from '../../components/icons.tsx'
 import { BarcodeView } from '../barcodes/BarcodeView.tsx'
 import { checkoutPresentation } from '../barcodes/presentation.ts'
@@ -162,16 +166,15 @@ export function CheckoutScreen({ cards, cardId, onChangeCard, onClose }: Checkou
 
   return (
     <div className="checkout" role="dialog" aria-modal="true" aria-labelledby="checkout-store">
-      {/* Three columns: spacer | M8TRX | ×, so the title is optically centred. */}
-      <div className="checkout__top" data-testid="checkout-header">
-        <span className="checkout__top-spacer" aria-hidden="true" />
-        <p className="checkout__brand" data-testid="checkout-brand" aria-hidden="true">
-          M8TRX
-        </p>
-        <button ref={closeRef} type="button" className="checkout__close" aria-label="Close card" onClick={onClose}>
-          <CloseIcon />
-        </button>
-      </div>
+      <AppHeader
+        className="checkout__top"
+        decorative
+        action={
+          <button ref={closeRef} type="button" className="checkout__close" aria-label="Close card" onClick={onClose}>
+            <CloseIcon />
+          </button>
+        }
+      />
 
       <div
         className="checkout__stage"

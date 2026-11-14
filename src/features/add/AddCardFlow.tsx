@@ -15,10 +15,14 @@
  *   inside the same tap, because iOS only allows file pickers from a direct
  *   user gesture.
  *
+ * - `footer` (v0.5.0) is shown under the capture choices on the first step
+ *   only. App fills it with Backup, About and the copyright notice, so this
+ *   flow does not depend on those features.
+ *
  * This module (with ZXing, bwip-js and the cropper) is loaded lazily by App,
  * so the wallet and checkout screens don't pay for capture code.
  */
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { BackIcon, CameraIcon, ImageIcon, KeyboardIcon } from '../../components/icons.tsx'
 import { ViewHeading } from '../../components/ViewHeading.tsx'
 import type { BarcodeFormat } from '../barcodes/formats.ts'
@@ -35,6 +39,8 @@ export interface AddCardFlowProps {
   onSave: (input: NewCardInput) => Promise<string | null>
   onCancel: () => void
   services?: CaptureServices
+  /** Secondary content below the capture choices on the first step. */
+  footer?: ReactNode
 }
 
 type Step =
@@ -44,7 +50,7 @@ type Step =
   | { name: 'manual'; initial?: { format: BarcodeFormat; value: string } }
   | { name: 'details'; barcode: CardBarcode; from: 'scan' | 'import' | 'manual'; artwork?: boolean }
 
-export function AddCardFlow({ defaultColor, onSave, onCancel, services = defaultCaptureServices }: AddCardFlowProps) {
+export function AddCardFlow({ defaultColor, onSave, onCancel, services = defaultCaptureServices, footer }: AddCardFlowProps) {
   const [step, setStep] = useState<Step>({ name: 'choose' })
   // The flow is always entered by in-app navigation, so every step's heading
   // takes focus, including the first.
@@ -113,6 +119,7 @@ export function AddCardFlow({ defaultColor, onSave, onCancel, services = default
             </button>
           </div>
           <p className="add-flow__privacy">Images and camera frames stay on this device.</p>
+          {footer}
         </>
       )}
 

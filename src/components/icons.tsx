@@ -19,6 +19,11 @@ export const CameraIcon = () => <Icon path="M4 8h3l2-3h6l2 3h3v11H4zM12 16.5a3.5
 export const ImageIcon = () => <Icon path="M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01" />
 export const KeyboardIcon = () => <Icon path="M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14h8" />
 export const CheckIcon = () => <Icon path="M5 12.5l4.5 4.5L19 7.5" />
+export const InfoIcon = () => <Icon path="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 11v5.5M12 7.75h.01" />
+/** Export: arrow down into a tray. */
+export const ExportIcon = () => <Icon path="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14" />
+/** Restore: arrow up out of a tray. */
+export const RestoreIcon = () => <Icon path="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14" />
 
 /** Three dots; filled circles read better than strokes at small sizes. */
 export const MoreIcon = () => (

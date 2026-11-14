@@ -54,20 +54,72 @@
     var(--color-bg);
 }
 
+/* ---- Shared M8TRX header ----------------------------------------------------
+ * Used by every screen (components/AppHeader.tsx): the brand lockup on the
+ * left and an optional action (Add Card, close) on the right. The row is one
+ * touch target tall so actions keep their 48px targets. On the wallet and
+ * add/About screens the .app-shell padding places it; checkout adds the same
+ * offsets itself (.checkout__top) because its overlay has different padding.
+ */
 .app-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-3);
   min-height: var(--touch-target);
   margin-bottom: var(--space-2);
 }
 
-.app-header__title {
-  font-size: var(--font-size-sm);
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/*
+ * Official DIM8 logo, original proportions and colours. Its canvas is black;
+ * `screen` blending makes that canvas transparent over the near-black app
+ * background (and the faint circuit traces) without changing the lit mark.
+ */
+.brand-lockup__logo {
+  flex: none;
+  width: auto;
+  height: var(--brand-logo-height);
+  mix-blend-mode: screen;
+}
+
+/*
+ * M8TRX in the brand typography (--font-segment) and DIM8 primary VFD
+ * colour with a soft VFD glow.
+ */
+.brand-lockup__title {
+  font-family: var(--font-segment);
+  font-size: var(--brand-title-size);
   font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  line-height: 1;
+  letter-spacing: var(--brand-title-tracking);
+  white-space: nowrap;
+  color: var(--color-brand);
+  text-shadow: 0 0 0.6rem var(--color-glow);
+}
+
+/* Larger, centred variant on the About screen. */
+.brand-lockup--about {
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.brand-lockup--about .brand-lockup__logo {
+  height: 6rem;
+}
+
+.brand-lockup--about .brand-lockup__title {
+  font-size: var(--font-size-xl);
+  /* Trailing tracking would push the centred word off centre. */
+  text-indent: var(--brand-title-tracking);
 }
 
 .app-main {
@@ -786,38 +838,24 @@ html.checkout-open body {
 }
 
 /*
- * Three equal outer columns (spacer | title | ×) keep M8TRX optically centred
- * on the screen rather than in the space left of the close button.
+ * Checkout's top bar is the shared header. The overlay is padded by the raw
+ * safe-area insets, so these paddings top it up to the wallet's
+ * max(--space-4, inset) offsets: the lockup and × land exactly where the
+ * wallet's lockup and + are. On notched iPhones (top inset ≥ 16px) the bar
+ * keeps its v0.4.2 height, so the stage and card do not move. Width matches
+ * the wallet column on large screens.
  */
 .checkout__top {
   flex: none;
-  display: grid;
-  grid-template-columns: var(--touch-target) minmax(0, 1fr) var(--touch-target);
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) 0;
-}
-
-/*
- * M8TRX header. --font-segment is the hook for the official DIM8
- * seven-segment font (not yet supplied; falls back to the DIM8 wordmark
- * stack). text-indent equals the letter-spacing so the trailing tracking
- * after the final letter does not shift the word off centre.
- */
-.checkout__brand {
-  min-width: 0;
-  text-align: center;
-  font-family: var(--font-segment);
-  font-size: clamp(1.75rem, 9vw, 2.5rem);
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.2em;
-  text-indent: 0.2em;
-  white-space: nowrap;
-  color: var(--color-brand);
-  text-shadow: 0 0 0.9rem var(--color-glow);
-  user-select: none;
-  -webkit-user-select: none;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--wallet-max-width);
+  margin-inline: auto;
+  padding:
+    max(0px, calc(var(--space-4) - env(safe-area-inset-top, 0px)))
+    max(0px, calc(var(--space-4) - env(safe-area-inset-right, 0px)))
+    0
+    max(0px, calc(var(--space-4) - env(safe-area-inset-left, 0px)));
 }
 
 .checkout__close {
@@ -1096,14 +1134,6 @@ html.checkout-open body {
  * its reserve reduced to match.
  */
 @media (max-height: 640px) {
-  .checkout__top {
-    padding-top: var(--space-1);
-  }
-
-  .checkout__brand {
-    font-size: clamp(1.5rem, 7.5vw, 1.875rem);
-  }
-
   .checkout__stage {
     padding-block: var(--space-3);
   }
@@ -1114,8 +1144,10 @@ html.checkout-open body {
     --checkout-title-reserve: 1.9rem;
   }
 
-  .checkout__brand {
-    font-size: 1.25rem;
+  /* Landscape phones: the card needs every pixel; tuck the header up. */
+  .checkout__top {
+    padding-top: var(--space-1);
+    margin-bottom: 0;
   }
 
   .checkout__stage {
@@ -1193,6 +1225,8 @@ html.checkout-open body {
 
 /* ---- Add-card flow -------------------------------------------------------- */
 .add-flow {
+  /* Fills the main column so the footer can sit at the bottom (see below). */
+  flex: 1 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -1249,6 +1283,178 @@ html.checkout-open body {
 
 .capture-option__hint {
   font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* ---- Add Card footer: Backup, About, copyright (v0.5.0) -----------------
+ * Secondary to the capture choices above: compact rows on a quieter surface.
+ * The add flow stretches to fill the main column and the footer takes the
+ * leftover space (margin-top: auto), so the copyright is the last line of
+ * the screen on tall phones and simply follows the content (scrolling) on
+ * short ones. The shell's bottom padding clears the home indicator.
+ */
+.add-flow__footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.utility-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.utility-group__title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.utility-group__message:empty {
+  display: none;
+}
+
+.utility-group__message {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-body);
+}
+
+.utility-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.utility-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--space-3);
+  align-items: center;
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.utility-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.utility-row:disabled,
+.utility-row[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.utility-row .button__icon {
+  grid-row: span 2;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--color-accent);
+}
+
+.utility-row__title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.utility-row__hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.backup-ready {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.backup-ready__text {
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.add-flow__copyright {
+  padding-top: var(--space-2);
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* ---- Restore confirmation ------------------------------------------------ */
+.restore-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.restore-summary__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: var(--space-5);
+  list-style: disc;
+  overflow-wrap: anywhere;
+}
+
+/* ---- About ------------------------------------------------------------------ */
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+.about__identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding-block: var(--space-4);
+  text-align: center;
+}
+
+.about__attribution {
+  color: var(--color-brand-secondary);
+  letter-spacing: 0.04em;
+}
+
+.about__version {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.about__description {
+  color: var(--color-text-body);
+}
+
+.about__link a {
+  color: var(--color-accent);
+  text-underline-offset: 0.2em;
+}
+
+.about__link a:hover {
+  color: var(--color-accent-hover);
+}
+
+.about__legal {
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
 

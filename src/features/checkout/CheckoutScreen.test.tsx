@@ -90,12 +90,20 @@ describe('CheckoutScreen layout', () => {
     expect(heading.nextElementSibling).toBe(screen.getByTestId('checkout-card'))
   })
 
-  it('places M8TRX in the top bar, above the name, centred between a spacer and the ×', () => {
+  it('places the shared M8TRX header (logo then title) upper left, with the × on the right, above the name', () => {
     renderCheckout([makeCard('a', 'Shop', { kind: 'generated', format: 'code128', value: '1' })])
-    const header = screen.getByTestId('checkout-header')
-    const [spacer, brand, close] = Array.from(header.children)
-    expect(spacer).toHaveAttribute('aria-hidden', 'true')
-    expect(brand).toBe(screen.getByTestId('checkout-brand'))
+    const header = screen.getByTestId('app-header')
+    expect(header).toHaveClass('app-header', 'checkout__top')
+    // Not a banner landmark inside the modal dialog.
+    expect(header.tagName).toBe('DIV')
+    const [brand, close] = Array.from(header.children)
+    expect(brand).toBe(screen.getByTestId('brand-lockup'))
+    expect(brand).toHaveAttribute('aria-hidden', 'true')
+    const [logo, title] = Array.from(brand!.children)
+    expect(logo).toBe(screen.getByTestId('brand-logo'))
+    expect(logo).toHaveAttribute('alt', '')
+    expect(title).toHaveTextContent('M8TRX')
+    expect(title).toHaveClass('brand-lockup__title')
     expect(close).toBe(screen.getByRole('button', { name: 'Close card' }))
     const heading = screen.getByRole('heading', { level: 1, name: 'Shop' })
     expect(brand!.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

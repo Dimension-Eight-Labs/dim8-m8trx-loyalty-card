@@ -17,6 +17,7 @@ import { verifyRoundTrip } from '../features/barcodes/verify.ts'
 import type { CardRepository } from '../features/cards/CardRepository.ts'
 import { LONG_PRESS_MS } from '../features/wallet/useWalletReorder.ts'
 import { App, LOADING_MESSAGE } from './App.tsx'
+import { APP_VERSION } from './appMetadata.ts'
 
 let factory: IDBFactory
 
@@ -589,9 +590,10 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Corner Coffee' }))
 
     const checkout = screen.getByRole('dialog', { name: 'Corner Coffee' })
-    // Top bar: decorative M8TRX title (hidden from assistive tech) and the ×.
-    const header = screen.getByTestId('checkout-header')
-    const brand = within(header).getByTestId('checkout-brand')
+    // Top bar: the shared header with a decorative M8TRX lockup (hidden from
+    // assistive tech) and the ×.
+    const header = screen.getByTestId('app-header')
+    const brand = within(header).getByTestId('brand-lockup')
     expect(brand).toHaveTextContent('M8TRX')
     expect(brand).toHaveAttribute('aria-hidden', 'true')
     expect(within(header).getByRole('button', { name: 'Close card' })).toBeInTheDocument()
@@ -1120,5 +1122,250 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Close card' })).toHaveFocus()
     await user.keyboard('{Escape}')
     expect(screen.getByRole('button', { name: 'Shop' })).toHaveFocus()
+  })
+})
+
+describe('M8TRX branding, About, and backup/restore (v0.5.0)', () => {
+  const NODE_BUFFER: string = 'node:buffer'
+  const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 1, 2, 254, 255, 9]
+
+  /** jsdom Blobs can't be stored in fake-indexeddb; use Node's Blob for every test here. */
+  async function stubNodeBlob() {
+    const { Blob: NodeBlob } = (await import(/* @vite-ignore */ NODE_BUFFER)) as { Blob: typeof Blob }
+    vi.stubGlobal('Blob', NodeBlob)
+    return NodeBlob
+  }
+
+  /**
+   * A wallet with linear, QR, text and kept-artwork cards, manually ordered
+   * (not creation order), created straight through the repository.
+   */
+  async function seedWallet(repository: CardRepository) {
+    const NodeBlob = await stubNodeBlob()
+    const coffee = await repository.create({ storeName: 'Coffee', color: 'red', barcode: { kind: 'generated', format: 'code128', value: '0012 34' } })
+    const gym = await repository.create({ storeName: 'Gym', color: 'blue', barcode: { kind: 'generated', format: 'qrcode', value: 'MEMBER-42' } })
+    const art = await repository.create({
+      storeName: 'Logo Shop',
+      color: 'purple',
+      barcode: { kind: 'image', image: new NodeBlob([new Uint8Array(PNG)], { type: 'image/png' }), detectedFormat: 'QR code', detectedValue: ' Gold ' },
+    })
+    const library = await repository.create({ storeName: 'Library', color: 'slate', barcode: { kind: 'text', value: '000123' } })
+    await repository.reorder([art.id, coffee.id, library.id, gym.id])
+    return ['Logo Shop', 'Coffee', 'Library', 'Gym']
+  }
+
+  /** Exports through the UI and returns the file handed to the (fake) save adapter. */
+  async function exportBackup(user: UserEvent, saveFile: ReturnType<typeof vi.fn>) {
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    await user.click(await screen.findByRole('button', { name: /export all cards/i }))
+    const save = await screen.findByRole('button', { name: 'Save backup' })
+    expect(save).toHaveFocus()
+    await user.click(save)
+    await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1))
+    return saveFile.mock.calls[0]![0] as File
+  }
+
+  async function imageBytes(repository: CardRepository, name: string) {
+    const card = (await repository.list()).find((item) => item.storeName === name)
+    if (card?.barcode.kind !== 'image') throw new Error('not an image card')
+    return Array.from(new Uint8Array(await card.barcode.image.arrayBuffer()))
+  }
+
+  it('shows the shared M8TRX header (logo, then title) on the wallet instead of "Loyalty Card"', async () => {
+    const { user } = renderApp()
+    await addManualCard(user, 'Shop', '1')
+    const banner = screen.getByRole('banner')
+    expect(banner).toHaveClass('app-header')
+    expect(banner).toBe(screen.getByTestId('app-header'))
+    const lockup = within(banner).getByTestId('brand-lockup')
+    const [logo, title] = Array.from(lockup.children)
+    expect(logo).toBe(within(banner).getByTestId('brand-logo'))
+    expect(logo).toHaveClass('brand-lockup__logo')
+    expect(title).toHaveTextContent('M8TRX')
+    expect(title).toHaveClass('brand-lockup__title')
+    // On the wallet the product name is real text, and Add Card stays on the right.
+    expect(lockup).not.toHaveAttribute('aria-hidden')
+    expect(banner.lastElementChild).toBe(screen.getByRole('button', { name: 'Add card' }))
+    expect(screen.queryByText(/loyalty card/i)).not.toBeInTheDocument()
+
+    // Checkout uses the identical lockup markup.
+    await user.click(screen.getByRole('button', { name: 'Shop' }))
+    const checkoutLockup = screen.getByTestId('brand-lockup')
+    expect(checkoutLockup.className).toBe(lockup.className)
+    expect(Array.from(checkoutLockup.children, (node) => node.className)).toEqual(['brand-lockup__logo', 'brand-lockup__title'])
+  })
+
+  it('offers Backup, About and the copyright at the bottom of Add Card, below the capture choices', async () => {
+    const { user } = renderApp()
+    await user.click(await screen.findByRole('button', { name: 'Add Card' }))
+    expect(await screen.findByRole('heading', { name: 'Add a card' })).toBeInTheDocument()
+
+    const footer = screen.getByTestId('add-card-footer')
+    const scan = screen.getByRole('button', { name: /scan card/i })
+    expect(scan.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(footer).getByRole('button', { name: /export all cards/i })).toBeDisabled() // empty wallet
+    expect(within(footer).getByRole('button', { name: /restore from backup/i })).toBeEnabled()
+    expect(within(footer).getByRole('button', { name: /about/i })).toBeInTheDocument()
+    expect(footer.lastElementChild).toHaveTextContent('© 2026 Dimension Eight Labs LLC')
+    expect(screen.getByRole('banner')).toHaveTextContent('M8TRX')
+  })
+
+  it('shows About with the logo, product name, version, website and legal notice, and returns to Add Card', async () => {
+    const { user } = renderApp()
+    await user.click(await screen.findByRole('button', { name: 'Add Card' }))
+    await user.click(await screen.findByRole('button', { name: /about/i }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'About' })).toHaveFocus()
+    const about = screen.getByRole('region', { name: 'About' })
+    const lockups = within(about).getAllByTestId('brand-lockup')
+    expect(lockups).toHaveLength(1)
+    expect(lockups[0]).toHaveClass('brand-lockup--about')
+    expect(within(lockups[0]!).getByTestId('brand-title')).toHaveTextContent('M8TRX')
+    expect(within(about).getByText('by DIM8 Labs')).toBeInTheDocument()
+    expect(within(about).getByTestId('about-version')).toHaveTextContent(`Version ${APP_VERSION}`)
+    expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+/)
+    const link = within(about).getByRole('link', { name: 'dim8labs.com' })
+    expect(link).toHaveAttribute('href', 'https://dim8labs.com')
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'))
+    expect(within(about).getByText(/simple, offline-first wallet for your loyalty cards/)).toHaveTextContent(
+      'M8TRX is a simple, offline-first wallet for your loyalty cards. Scan them once. Show them when you need them. No accounts, no tracking, no unnecessary nonsense.',
+    )
+    expect(within(about).getByText('© 2026 Dimension Eight Labs LLC. All rights reserved.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('heading', { name: 'Add a card' })).toHaveFocus()
+  })
+
+  it('exports every card, in wallet order, with the original artwork bytes', async () => {
+    const repository = makeRepository()
+    const names = await seedWallet(repository)
+    const saveFile = vi.fn(async () => 'downloaded' as const)
+    const user = userEvent.setup()
+    render(<App repository={repository} capture={fakeCapture()} saveFile={saveFile} />)
+
+    const file = await exportBackup(user, saveFile)
+    expect(file.name).toMatch(/^m8trx-backup-\d{4}-\d{2}-\d{2}\.m8trx$/)
+    const doc = JSON.parse(await file.text())
+    expect(doc).toMatchObject({ format: 'm8trx-backup', version: 1, app: { name: 'M8TRX', version: APP_VERSION } })
+    expect(doc.cards.map((card: { storeName: string }) => card.storeName)).toEqual(names)
+    expect(doc.cards.map((card: { barcode: { kind: string } }) => card.barcode.kind)).toEqual(['image', 'generated', 'text', 'generated'])
+    expect(Array.from(atob(doc.cards[0].barcode.data), (ch) => ch.charCodeAt(0))).toEqual(PNG)
+    expect(await screen.findByText(/backup downloaded/i)).toBeInTheDocument()
+  })
+
+  it('restores a backup into an empty wallet on another device, preserving order and artwork', async () => {
+    const source = makeRepository()
+    const names = await seedWallet(source)
+    const saveFile = vi.fn(async () => 'shared' as const)
+    const first = render(<App repository={source} capture={fakeCapture()} saveFile={saveFile} />)
+    const file = await exportBackup(userEvent.setup(), saveFile)
+    first.unmount()
+
+    // "Another device": a brand-new, empty browser profile.
+    factory = new IDBFactory()
+    const { user } = renderApp()
+    await user.click(await screen.findByRole('button', { name: 'Add Card' }))
+    await user.upload(await screen.findByTestId('restore-file-input'), file)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Restore from backup?' })
+    expect(within(dialog).getByText(/this backup has/i)).toHaveTextContent('This backup has 4 cards.')
+    expect(within(dialog).getByTestId('restore-summary')).toHaveTextContent('4 new cards will be added')
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    await user.click(within(dialog).getByRole('button', { name: 'Add 4 cards' }))
+
+    expect(await screen.findByText('Restored 4 cards from your backup.')).toBeInTheDocument()
+    expect(tileOrder()).toEqual(names)
+    // Survives a restart, with the artwork byte-for-byte.
+    expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(names)
+    expect(await imageBytes(makeRepository(), 'Logo Shop')).toEqual(PNG)
+  })
+
+  it('restores into a non-empty wallet: keeps existing cards, skips duplicates, appends the rest', async () => {
+    const source = makeRepository()
+    await seedWallet(source)
+    const saveFile = vi.fn(async () => 'downloaded' as const)
+    const first = render(<App repository={source} capture={fakeCapture()} saveFile={saveFile} />)
+    const file = await exportBackup(userEvent.setup(), saveFile)
+    first.unmount()
+
+    factory = new IDBFactory()
+    const target = makeRepository()
+    await target.create({ storeName: 'Mine', color: 'green', barcode: { kind: 'generated', format: 'code128', value: 'MINE' } })
+    // The same Gym pass, saved separately on this device (different ID).
+    await target.create({ storeName: 'My gym', color: 'teal', barcode: { kind: 'generated', format: 'qrcode', value: 'MEMBER-42' } })
+    const { user } = renderApp(target)
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    await user.upload(await screen.findByTestId('restore-file-input'), file)
+
+    const summary = within(await screen.findByRole('dialog')).getByTestId('restore-summary')
+    expect(summary).toHaveTextContent('3 new cards will be added')
+    expect(summary).toHaveTextContent('1 card already in your wallet is skipped: Gym.')
+    await user.click(screen.getByRole('button', { name: 'Add 3 cards' }))
+
+    expect(await screen.findByText('Restored 3 cards from your backup.')).toBeInTheDocument()
+    expect(tileOrder()).toEqual(['Mine', 'My gym', 'Logo Shop', 'Coffee', 'Library'])
+
+    // Restoring the same file again adds nothing.
+    await user.click(screen.getByRole('button', { name: /add card/i }))
+    await user.upload(await screen.findByTestId('restore-file-input'), file)
+    const again = await screen.findByRole('dialog', { name: 'Nothing new to restore' })
+    expect(within(again).queryByRole('button', { name: /^Add/ })).not.toBeInTheDocument()
+    await user.click(within(again).getByRole('button', { name: 'Close' }))
+    expect(await makeRepository().list()).toHaveLength(5)
+  })
+
+  it('rejects malformed and unsupported files with a message and changes nothing', async () => {
+    const repository = makeRepository()
+    await seedWallet(repository)
+    const { user } = renderApp(repository)
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    const input = await screen.findByTestId('restore-file-input')
+
+    await user.upload(input, new File(['{"hello": "world"}'], 'notes.json', { type: 'application/json' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('This file isn’t an M8TRX backup.')
+
+    const future = JSON.stringify({ format: 'm8trx-backup', version: 9, order: [], cards: [] })
+    await user.upload(input, new File([future], 'future.m8trx'))
+    expect(await screen.findByText(/newer version of M8TRX/)).toBeInTheDocument()
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await repository.list()).toHaveLength(4)
+  })
+
+  it('keeps the wallet unchanged and explains when the restore fails to save', async () => {
+    const source = makeRepository()
+    await seedWallet(source)
+    const saveFile = vi.fn(async () => 'downloaded' as const)
+    const first = render(<App repository={source} capture={fakeCapture()} saveFile={saveFile} />)
+    const file = await exportBackup(userEvent.setup(), saveFile)
+    first.unmount()
+
+    factory = new IDBFactory()
+    const real = makeRepository()
+    await real.create({ storeName: 'Mine', color: 'green', barcode: { kind: 'generated', format: 'code128', value: 'MINE' } })
+    const failing: CardRepository = { ...real, importCards: async () => Promise.reject(new Error('Couldn’t restore the backup. Nothing was imported.')) }
+    const { user } = renderApp(failing)
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    await user.upload(await screen.findByTestId('restore-file-input'), file)
+    await user.click(await screen.findByRole('button', { name: 'Add 4 cards' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Nothing was imported')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(['Mine'])
+  })
+
+  it('lets the user retry saving after cancelling the share sheet', async () => {
+    const repository = makeRepository()
+    await seedWallet(repository)
+    const saveFile = vi.fn<(file: File) => Promise<'shared' | 'downloaded' | 'cancelled'>>()
+    saveFile.mockResolvedValueOnce('cancelled').mockResolvedValueOnce('shared')
+    const user = userEvent.setup()
+    render(<App repository={repository} capture={fakeCapture()} saveFile={saveFile} />)
+    await exportBackup(user, saveFile)
+    expect(await screen.findByText(/backup not saved/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save backup' }))
+    expect(await screen.findByText(/backup shared/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save backup' })).not.toBeInTheDocument()
   })
 })

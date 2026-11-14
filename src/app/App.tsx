@@ -23,11 +23,21 @@
  * drag (WalletScreen) or the menu's move actions; both save the complete new
  * order through `reorderCards` and announce the card's new position in the
  * polite status region. A failed save leaves the previous order in place.
+ *
+ * Branding and portability (v0.5.0): every screen shows the shared M8TRX
+ * header (AppHeader). The Add Card screen's footer (AddCardFooter) offers
+ * backup export/restore and About. A validated restore plan is confirmed in
+ * RestoreDialog, owned here like the other dialogs so the rest of the app is
+ * inert meanwhile; the import itself is one atomic repository transaction.
  */
 import { lazy, Suspense, useRef, useState } from 'react'
 import { AppHeader } from '../components/AppHeader.tsx'
 import { PlusIcon } from '../components/icons.tsx'
+import { AboutView } from '../features/about/AboutView.tsx'
 import type { CaptureServices } from '../features/add/captureServices.ts'
+import type { RestorePlan } from '../features/backup/backupFormat.ts'
+import { RestoreDialog } from '../features/backup/RestoreDialog.tsx'
+import type { SaveFile } from '../features/backup/saveFile.ts'
 import { CardEmptyState } from '../features/cards/CardEmptyState.tsx'
 import type { CardRepository } from '../features/cards/CardRepository.ts'
 import { DeleteCardDialog } from '../features/cards/DeleteCardDialog.tsx'
@@ -37,23 +47,35 @@ import { CheckoutScreen } from '../features/checkout/CheckoutScreen.tsx'
 import { CardMenu } from '../features/wallet/CardMenu.tsx'
 import { movedOrder } from '../features/wallet/walletOrder.ts'
 import { WalletScreen } from '../features/wallet/WalletScreen.tsx'
+import { AddCardFooter } from './AddCardFooter.tsx'
 
 const AddCardFlow = lazy(() => import('../features/add/AddCardFlow.tsx').then((module) => ({ default: module.AddCardFlow })))
 
-export type View = { name: 'wallet'; focusCardId?: string } | { name: 'add' } | { name: 'checkout'; cardId: string }
+export type View =
+  | { name: 'wallet'; focusCardId?: string }
+  | { name: 'add' }
+  | { name: 'about' }
+  | { name: 'checkout'; cardId: string }
 
-type DialogState = { name: 'menu'; cardId: string } | { name: 'delete'; cardId: string } | null
+type DialogState =
+  | { name: 'menu'; cardId: string }
+  | { name: 'delete'; cardId: string }
+  | { name: 'restore'; plan: RestorePlan }
+  | null
 
 export interface AppProps {
   repository: CardRepository
   /** Camera/image/decoder adapters; defaults to the browser implementations. Injectable for tests. */
   capture?: CaptureServices
+  /** Hands a finished backup file to the user; defaults to share sheet / download. Injectable for tests. */
+  saveFile?: SaveFile
 }
 
 export const LOADING_MESSAGE = 'Loading your cards…'
 
-export function App({ repository, capture }: AppProps) {
-  const { status, cards, loadError, reload, createCard, updateCard, deleteCard, reorderCards } = useCards(repository)
+export function App({ repository, capture, saveFile }: AppProps) {
+  const { status, cards, loadError, reload, createCard, updateCard, deleteCard, reorderCards, importCards, loadSnapshot } =
+    useCards(repository)
   const [view, setView] = useState<View>({ name: 'wallet' })
   const [dialog, setDialog] = useState<DialogState>(null)
   // False until the first in-app navigation, so initial load does not move focus.
@@ -93,7 +115,7 @@ export function App({ repository, capture }: AppProps) {
     setView(next)
   }
 
-  const dialogCard = dialog ? cards.find((card) => card.id === dialog.cardId) : undefined
+  const dialogCard = dialog && dialog.name !== 'restore' ? cards.find((card) => card.id === dialog.cardId) : undefined
 
   // Checkout replaces the whole app shell: nothing else on screen.
   if (status === 'ready' && view.name === 'checkout' && cards.some((card) => card.id === view.cardId)) {
@@ -151,9 +173,22 @@ export function App({ repository, capture }: AppProps) {
               navigate({ name: 'wallet', focusCardId: result.value.id }, 'Card saved.')
               return null
             }}
+            footer={
+              <AddCardFooter
+                cardCount={cards.length}
+                loadSnapshot={loadSnapshot}
+                onRestorePlanned={(plan) => setDialog({ name: 'restore', plan })}
+                saveFile={saveFile}
+                onAbout={() => navigate({ name: 'about' })}
+              />
+            }
           />
         </Suspense>
       )
+    }
+
+    if (view.name === 'about') {
+      return <AboutView focusOnMount={hasNavigated} onBack={() => navigate({ name: 'add' })} />
     }
 
     if (cards.length === 0) {
@@ -173,9 +208,10 @@ export function App({ repository, capture }: AppProps) {
     )
   }
 
-  const showAdd = status === 'ready' && view.name !== 'add' && cards.length > 0
-  const centred = status !== 'ready' || (view.name !== 'add' && cards.length === 0)
-  const showDialog = dialog !== null && dialogCard !== undefined
+  const showAdd = status === 'ready' && view.name === 'wallet' && cards.length > 0
+  const centred = status !== 'ready' || (view.name === 'wallet' && cards.length === 0)
+  const restorePlan = dialog?.name === 'restore' ? dialog.plan : null
+  const showDialog = restorePlan !== null || (dialog !== null && dialogCard !== undefined)
 
   return (
     <>
@@ -204,7 +240,22 @@ export function App({ repository, capture }: AppProps) {
         </main>
       </div>
 
-      {showDialog && dialog.name === 'menu' && (
+      {restorePlan && (
+        <RestoreDialog
+          plan={restorePlan}
+          onCancel={() => setDialog(null)}
+          onConfirm={async () => {
+            const result = await importCards(restorePlan.toImport, restorePlan.expectedOrder)
+            if (!result.ok) return result.message
+            setDialog(null)
+            const restored = result.value
+            navigate({ name: 'wallet' }, `Restored ${restored} ${restored === 1 ? 'card' : 'cards'} from your backup.`)
+            return null
+          }}
+        />
+      )}
+
+      {showDialog && dialogCard && dialog?.name === 'menu' && (
         <CardMenu
           card={dialogCard}
           position={cards.indexOf(dialogCard)}
@@ -238,7 +289,7 @@ export function App({ repository, capture }: AppProps) {
         />
       )}
 
-      {showDialog && dialog.name === 'delete' && (
+      {showDialog && dialogCard && dialog?.name === 'delete' && (
         <DeleteCardDialog
           storeName={dialogCard.storeName}
           onCancel={() => setDialog(null)}

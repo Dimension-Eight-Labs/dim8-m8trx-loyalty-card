@@ -20,6 +20,11 @@
  * and src/data/cardRecords.ts). If any step fails, IndexedDB aborts the whole
  * upgrade and the database stays at the old version with its data intact.
  *
+ * Restoring a backup (`importCards`, v0.5.0) adds whole cards and extends
+ * `walletOrder` in one transaction, after re-checking that the wallet is
+ * still the one the restore was planned against; any failure rolls back
+ * every added card. Existing records are never rewritten.
+ *
  * Durability: every mutation resolves only after its transaction fires
  * `complete`, so the UI never reports a save that IndexedDB did not commit.
  *
@@ -61,6 +66,9 @@ const OPEN_FAILED_MESSAGE = 'Couldn’t open card storage.'
 const BLOCKED_MESSAGE = 'Card storage is busy in another tab. Close other copies of the app and try again.'
 const REORDER_FAILED_MESSAGE = 'Couldn’t save the new card order.'
 const ORDER_CHANGED_MESSAGE = 'Your cards changed while reordering. Please try again.'
+const IMPORT_FAILED_MESSAGE = 'Couldn’t restore the backup. Nothing was imported.'
+const IMPORT_CHANGED_MESSAGE = 'Your cards changed while restoring. Nothing was imported; please try again.'
+const IMPORT_INVALID_MESSAGE = 'The backup contains invalid cards. Nothing was imported.'
 
 export interface IndexedDbCardRepositoryOptions {
   /** Database name; tests use unique names for isolation. */
@@ -329,6 +337,59 @@ export function createIndexedDbCardRepository(
           // by a newer app) so a downgrade-then-upgrade doesn't lose them.
           const kept = (readOrder(orderRequest.result) ?? []).filter((id) => unreadable.has(id))
           meta.put([...orderedIds, ...kept], ORDER_KEY)
+        }
+        return () => undefined
+      })
+    },
+
+    async importCards(cards, expectedOrder) {
+      // Cheap checks before touching storage: every card must be a complete,
+      // valid v2 record, with no duplicate IDs among them.
+      // Records are stored in their normalized form (known fields only).
+      const records = cards.map(readCardRecord)
+      const ids = cards.map((card) => card.id)
+      if (
+        new Set(ids).size !== ids.length ||
+        records.some((record) => record === null || validateNewCard(record) !== null)
+      ) {
+        throw new CardValidationError(IMPORT_INVALID_MESSAGE)
+      }
+      if (records.length === 0) return
+      await transact([CARD_STORE, META_STORE], 'readwrite', IMPORT_FAILED_MESSAGE, (tx, abort) => {
+        const store = tx.objectStore(CARD_STORE)
+        const meta = tx.objectStore(META_STORE)
+        const existingRequest = store.getAll()
+        const orderRequest = meta.get(ORDER_KEY)
+        // Requests complete in order, so both results exist here.
+        orderRequest.onsuccess = () => {
+          const existing = existingRequest.result as unknown[]
+          const readable: LoyaltyCard[] = []
+          const allIds = new Set<string>()
+          const unreadable = new Set<string>()
+          for (const record of existing) {
+            const card = readCardRecord(record)
+            if (card) readable.push(card)
+            if (isObject(record) && typeof record.id === 'string') {
+              allIds.add(record.id)
+              if (!card) unreadable.add(record.id)
+            }
+          }
+          const stored = readOrder(orderRequest.result)
+          const current = reconcileOrder(readable, stored).map((card) => card.id)
+          // Re-check, inside the transaction, that the wallet is exactly the
+          // one the restore was planned against (another tab may have
+          // changed it since), and that no ID is taken, including by records
+          // this version can't read.
+          const unchanged = current.length === expectedOrder.length && current.every((id, i) => id === expectedOrder[i])
+          if (!unchanged || ids.some((id) => allIds.has(id))) {
+            abort(new CardValidationError(IMPORT_CHANGED_MESSAGE))
+            return
+          }
+          // `add` (never `put`): an unexpected collision fails the request,
+          // which aborts the whole transaction instead of overwriting.
+          for (const record of records) store.add(record as LoyaltyCard)
+          const kept = (stored ?? []).filter((id) => unreadable.has(id))
+          meta.put([...current, ...ids, ...kept], ORDER_KEY)
         }
         return () => undefined
       })
