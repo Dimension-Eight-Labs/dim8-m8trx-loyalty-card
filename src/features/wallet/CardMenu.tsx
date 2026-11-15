@@ -7,6 +7,15 @@
  * category icon picker. Delete hands back to the parent, which shows the
  * separate DeleteCardDialog confirmation.
  *
+ * Menu step layout (v0.6.1): a compact identity header in the card's own
+ * palette color, showing its category icon (if any) and full name with the
+ * same text/icon color rule as the wallet tile, so it is obvious which card is
+ * being edited. The header holds a 48px top-right Close (×) button, which
+ * replaced the old Cancel row; Escape and a tap on the backdrop still close
+ * the menu. Each action row has a small decorative line icon before its
+ * label. Rename keeps initial focus. The rename / color / icon steps keep
+ * their own Cancel buttons, which return to the menu.
+ *
  * Move actions are the keyboard- and screen-reader-accessible alternative to
  * dragging. "Move up" and "Move down" (internally the `earlier` / `later`
  * targets) mean one place back or forward in reading order (left to right,
@@ -22,12 +31,25 @@
  * `onRename` / `onRecolor` / `onChangeIcon` resolve to an error message or null; on failure the
  * step stays open with the message and the user's input.
  */
-import { useId, useRef, useState, type FormEvent } from 'react'
+import { useId, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
 import { Dialog } from '../../components/Dialog.tsx'
+import {
+  ArrowDownIcon,
+  ArrowToBottomIcon,
+  ArrowToTopIcon,
+  ArrowUpIcon,
+  CloseIcon,
+  DropIcon,
+  PencilIcon,
+  TagIcon,
+  TrashIcon,
+} from '../../components/icons.tsx'
 import { CARD_LIMITS, validateStoreName, type LoyaltyCard } from '../cards/card.ts'
+import { CardCategoryIcon } from '../cards/CardCategoryIcon.tsx'
 import type { CardIconId } from '../cards/cardIcons.ts'
 import { ColorPicker } from '../cards/ColorPicker.tsx'
 import { IconPicker } from '../cards/IconPicker.tsx'
+import { tileColor } from '../cards/tileColors.ts'
 import type { MoveTarget } from './walletOrder.ts'
 
 export interface CardMenuProps {
@@ -52,6 +74,10 @@ export function CardMenu({ card, position, count, onClose, onRename, onRecolor, 
   const [moveError, setMoveError] = useState<string | null>(null)
   const [moving, setMoving] = useState(false)
   const titleId = useId()
+  // Rename stays the first focused control, as before the header gained its
+  // Close button (which comes first in DOM and tab order).
+  const firstActionRef = useRef<HTMLButtonElement>(null)
+  const colors = tileColor(card.color)
   const atStart = position <= 0
   const atEnd = position >= count - 1
 
@@ -68,44 +94,42 @@ export function CardMenu({ card, position, count, onClose, onRename, onRecolor, 
   }
 
   return (
-    <Dialog key={step} labelledBy={titleId} onEscape={step === 'menu' ? onClose : () => setStep('menu')} className="dialog--menu">
+    <Dialog
+      key={step}
+      labelledBy={titleId}
+      onEscape={step === 'menu' ? onClose : () => setStep('menu')}
+      initialFocusRef={step === 'menu' ? firstActionRef : undefined}
+      className="dialog--menu"
+    >
       {step === 'menu' && (
         <>
-          <h2 id={titleId} className="dialog__title">
-            {card.storeName}
-          </h2>
+          {/* Identity header: the card's own color, icon and name, styled like its tile. */}
+          <div className="card-header" data-testid="card-menu-header" style={{ background: colors.background, color: colors.text }}>
+            {card.icon && (
+              <span className="card-header__icon">
+                <CardCategoryIcon icon={card.icon} />
+              </span>
+            )}
+            <h2 id={titleId} className="card-header__title">
+              {card.storeName}
+            </h2>
+            <button type="button" className="card-header__close" aria-label="Close" onClick={onClose}>
+              <CloseIcon />
+            </button>
+          </div>
           <div className="menu-list">
-            <button type="button" className="menu-list__item" onClick={() => setStep('rename')}>
-              Rename
-            </button>
-            <button type="button" className="menu-list__item" onClick={() => setStep('color')}>
-              Change color
-            </button>
-            <button type="button" className="menu-list__item" onClick={() => setStep('icon')}>
-              Change icon
-            </button>
+            <MenuItem ref={firstActionRef} icon={<PencilIcon />} label="Rename" onClick={() => setStep('rename')} />
+            <MenuItem icon={<DropIcon />} label="Change color" onClick={() => setStep('color')} />
+            <MenuItem icon={<TagIcon />} label="Change icon" onClick={() => setStep('icon')} />
             {count > 1 && (
               <div className="menu-list__group" role="group" aria-label={`Position ${position + 1} of ${count}`}>
-                <button type="button" className="menu-list__item" disabled={atStart || moving} onClick={() => move('earlier')}>
-                  Move up
-                </button>
-                <button type="button" className="menu-list__item" disabled={atEnd || moving} onClick={() => move('later')}>
-                  Move down
-                </button>
-                <button type="button" className="menu-list__item" disabled={atStart || moving} onClick={() => move('first')}>
-                  Move to first
-                </button>
-                <button type="button" className="menu-list__item" disabled={atEnd || moving} onClick={() => move('last')}>
-                  Move to last
-                </button>
+                <MenuItem icon={<ArrowUpIcon />} label="Move up" disabled={atStart || moving} onClick={() => move('earlier')} />
+                <MenuItem icon={<ArrowDownIcon />} label="Move down" disabled={atEnd || moving} onClick={() => move('later')} />
+                <MenuItem icon={<ArrowToTopIcon />} label="Move to first" disabled={atStart || moving} onClick={() => move('first')} />
+                <MenuItem icon={<ArrowToBottomIcon />} label="Move to last" disabled={atEnd || moving} onClick={() => move('last')} />
               </div>
             )}
-            <button type="button" className="menu-list__item menu-list__item--danger" onClick={onDelete}>
-              Delete
-            </button>
-            <button type="button" className="menu-list__item menu-list__item--cancel" onClick={onClose}>
-              Cancel
-            </button>
+            <MenuItem icon={<TrashIcon />} label="Delete" danger onClick={onDelete} />
           </div>
           <div role="alert">{moveError && <p className="notice notice--error">{moveError}</p>}</div>
         </>
@@ -114,6 +138,31 @@ export function CardMenu({ card, position, count, onClose, onRename, onRecolor, 
       {step === 'color' && <ColorStep titleId={titleId} card={card} onCancel={() => setStep('menu')} onSave={onRecolor} />}
       {step === 'icon' && <IconStep titleId={titleId} card={card} onCancel={() => setStep('menu')} onSave={onChangeIcon} />}
     </Dialog>
+  )
+}
+
+interface MenuItemProps {
+  ref?: Ref<HTMLButtonElement>
+  icon: ReactNode
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  danger?: boolean
+}
+
+/** One action row: decorative line icon, then the visible label (its accessible name). */
+function MenuItem({ ref, icon, label, onClick, disabled, danger = false }: MenuItemProps) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={danger ? 'menu-list__item menu-list__item--danger' : 'menu-list__item'}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {icon}
+      <span className="menu-list__label">{label}</span>
+    </button>
   )
 }
 

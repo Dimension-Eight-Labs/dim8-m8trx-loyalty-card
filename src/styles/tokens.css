@@ -80,6 +80,11 @@
 
   /* Official DIM8 body font stack: the application font. */
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /*
+   * Card names wherever a card shows its own identity (wallet tile, card-menu
+   * header, checkout band; v0.6.1), so the three cannot drift apart.
+   */
+  --card-name-font: var(--font-sans);
   /* Official DIM8 wordmark font stack. */
   --font-wordmark: 'Avenir Next', 'Segoe UI', Helvetica, Arial, sans-serif;
   /*

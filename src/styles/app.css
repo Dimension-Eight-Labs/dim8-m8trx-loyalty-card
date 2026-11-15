@@ -454,8 +454,11 @@
 }
 
 /* ---- Wallet ---------------------------------------------------------------
- * Square tiles in a responsive grid: two columns on phones (each tile about
- * the size of a thumb-friendly physical card), more as width allows.
+ * Short rectangular tiles (3:2, v0.6.1; square before) in a responsive grid:
+ * two columns on phones, more as width allows. iPhone testing showed the
+ * square tiles left a lot of empty color between the icon and the name; at
+ * 3:2 a two-column phone tile is still about 105–120px tall, comfortably
+ * holding the 34px icon slot, the 44px ⋯ target and the one-line name.
  * Tile backgrounds and text colours come from the card's palette colour
  * (inline style).
  * The grid is the tiles' offsetParent (position: relative) so the reorder
@@ -472,7 +475,7 @@
   --tile-padding: var(--space-3);
   --tile-icon-size: 2.125rem;
   position: relative;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 2;
   border-radius: var(--radius-lg);
   /* Light inner edge: dark palette colours sit at ~2.3–3.4:1 against the page,
    * so the outline keeps every tile's boundary visible (WCAG 1.4.11). */
@@ -542,6 +545,7 @@
 .tile__name {
   display: block;
   width: 100%;
+  font-family: var(--card-name-font);
   font-size: clamp(0.95rem, 4.1vw, 1.15rem);
   font-weight: 400;
   line-height: 1.3;
@@ -629,28 +633,106 @@
   }
 }
 
-/* ---- Card menu ------------------------------------------------------------ */
-.dialog--menu .dialog__title {
+/* ---- Card menu ------------------------------------------------------------
+ * v0.6.1: an identity header in the card's palette color (inline background
+ * and text color) with its icon, name and a top-right Close ×, then the
+ * action rows. Rows follow the Add Card capture options: a raised surface,
+ * an accent line icon before a 650-weight label, and 48px touch targets,
+ * joined into one bordered list to keep the sheet short on small phones.
+ */
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 4rem;
+  padding: var(--space-2) var(--space-1) var(--space-2) var(--space-4);
+  border-radius: var(--radius-lg);
+  /* Same light inner edge as the wallet tile (dark colors vs. the sheet). */
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  background-image: linear-gradient(160deg, rgb(255 255 255 / 0.12), transparent 55%);
+}
+
+.card-header__icon {
+  flex: none;
+  width: 1.875rem;
+  height: 1.875rem;
+}
+
+.card-header__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * The full name, in the tile's typography. Long names wrap (anywhere, so one
+ * long word cannot overflow) to at most two lines, then are clamped; the
+ * heading's text, and so the dialog's accessible name, stays complete.
+ */
+.card-header__title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--card-name-font);
+  font-size: 1.125rem;
+  font-weight: 400;
+  line-height: 1.3;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.card-header__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  align-self: flex-start;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.card-header__close:hover,
+.card-header__close:focus-visible {
+  background: rgb(0 0 0 / 0.15);
+}
+
+.card-header__close:focus-visible {
+  outline-color: currentColor;
+  outline-offset: -3px;
 }
 
 .menu-list {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
 .menu-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
   min-height: var(--touch-target);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-5);
   border: 0;
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
+  color: var(--color-text);
   text-align: left;
-  font-weight: 600;
+  font-weight: 650;
   cursor: pointer;
+}
+
+.menu-list__item .button__icon {
+  color: var(--color-accent);
 }
 
 .menu-list__item:first-child {
@@ -671,6 +753,10 @@
   opacity: 0.6;
 }
 
+.menu-list__item:disabled .button__icon {
+  color: inherit;
+}
+
 .menu-list__item:disabled:hover {
   background: var(--color-surface);
 }
@@ -685,12 +771,9 @@
   border-top: 1px solid var(--color-border);
 }
 
-.menu-list__item--danger {
+.menu-list__item--danger,
+.menu-list__item--danger .button__icon {
   color: var(--color-danger);
-}
-
-.menu-list__item--cancel {
-  color: var(--color-text-muted);
 }
 
 /* ---- Colour picker -------------------------------------------------------- */
@@ -825,10 +908,13 @@
  *   colour whatever card is active; html/body are painted with --color-bg
  *   while open for the same reason.
  * - Top bar: the M8TRX header centred between a spacer and the ×.
- * - Stage: the store name directly above the card face, centred as a group.
- * - Card face: white, with thin accent bands; shape chosen per barcode via
- *   data-presentation (see barcodes/presentation.ts). Its accent arrives as
- *   --card-accent inline on .checkout__face only.
+ * - Stage: the card face, centred.
+ * - Card face (v0.6.1): an enlarged wallet tile. A tall upper band in the
+ *   card's palette color holds the icon and store name; the optical code sits
+ *   on white between it and a lower band of the same color. Shape chosen per
+ *   barcode via data-presentation (see barcodes/presentation.ts). The palette
+ *   pair arrives as --card-accent / --card-on-accent inline on
+ *   .checkout__face only.
  * - Bottom: pagination arrows and dots.
  * Brand text, navigation accents and glows use the DIM8 tokens only.
  * Content stays inside the safe area via padding on .checkout itself.
@@ -845,12 +931,14 @@ html.checkout-open body {
 
 .checkout {
   /*
-   * Height reserved above the card for the store name: two lines at the
-   * largest title size (1.3125rem × 1.25 line-height × 2 ≈ 3.3rem) plus the
-   * gap. The card's height budget subtracts it, so a wrapped name never
-   * pushes the card out of the stage. Reduced on very short screens below.
+   * Card bands (v0.6.1). The upper band holds up to two lines of the title
+   * (2 × 1.2rem × 1.2 line-height ≈ 2.9rem) plus a little padding, and has a
+   * fixed height so the white code area never changes size with the name.
+   * The lower band is twice its earlier 0.375rem. Both shrink on very short
+   * screens below.
    */
-  --checkout-title-reserve: 3.8rem;
+  --checkout-band-top: 3.5rem;
+  --checkout-band-bottom: 0.75rem;
   position: fixed;
   inset: 0;
   z-index: 20;
@@ -923,8 +1011,7 @@ html.checkout-open body {
 }
 
 /*
- * The store name and the card face, stacked. Carries the drag offset (inline
- * transform), so the caption moves with its card.
+ * Wrapper for the card face. Carries the drag offset (inline transform).
  */
 .checkout__card {
   display: flex;
@@ -939,39 +1026,19 @@ html.checkout-open body {
 }
 
 /*
- * Store name: the app font in the DIM8 brand colour (14.3:1 on the
- * background) with a faint VFD glow. Long names wrap to at most two lines
- * (anywhere, so one very long word cannot overflow) and are then clamped
- * visually; the element's text, and so the dialog's accessible name, is
- * always the complete name.
- */
-.checkout__store {
-  max-width: min(100%, 22rem);
-  text-align: center;
-  font-family: var(--font-sans);
-  font-size: clamp(1.0625rem, 4.6vw, 1.3125rem);
-  font-weight: 650;
-  line-height: 1.25;
-  letter-spacing: 0.01em;
-  color: var(--color-brand);
-  text-shadow: 0 0 0.75rem rgb(var(--color-glow-rgb) / 0.3);
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
-
-/*
  * The visible card. --face-max caps it well short of edge to edge on large
  * phones and desktops; the cqh term keeps the ratio's height within the
- * stage after the title reserve. The fallback width (no container units)
- * only limits by width.
+ * stage. The fallback width (no container units) only limits by width.
+ *
+ * Ratios (v0.6.1): the store name moved from a caption above the card into
+ * its upper band, so each face is a little taller than before to give the
+ * white code area back the height the bands now take. The card plus its old
+ * caption occupied about the same height, so the overall footprint on the
+ * stage is essentially unchanged.
  */
 .checkout__face {
-  /* Default ("card"): credit-card ratio (85.6 × 54 mm). */
-  --face-ratio: 1.586;
+  /* Default ("card"): linear codes; was the 1.586 credit-card ratio. */
+  --face-ratio: 1.4;
   --face-max: 22rem;
   display: flex;
   flex-direction: column;
@@ -992,23 +1059,22 @@ html.checkout-open body {
 
 @supports (width: 1cqh) {
   .checkout__face {
-    width: min(100cqw, var(--face-max), (100cqh - var(--checkout-title-reserve)) * var(--face-ratio));
+    width: min(100cqw, var(--face-max), 100cqh * var(--face-ratio));
   }
 }
 
 /*
- * Square symbols (QR, Data Matrix, Aztec; redrawn or saved artwork). In the
- * credit-card face a QR code was height-limited to roughly 150–195 px on
- * common phones. A near-square face lets the symbol use almost the full card
- * width: 0.93 makes the code area (face minus the 1.25rem of bands and
- * 0.75rem padding) close to square between 15rem and 20rem wide, i.e. about
- * 230 px on a 320 px phone and 290 px on a 375 px phone (~+50%). 20rem caps
- * it on large screens; the cqh term shrinks it on short ones. The image keeps
- * object-fit: contain, so non-square artwork is letterboxed on white, never
- * stretched or cropped.
+ * Square symbols (QR, Data Matrix, Aztec; redrawn or saved artwork). A tall
+ * face lets the symbol use almost the full card width: 0.82 makes the code
+ * area (face minus the 4.25rem of bands and 1.5rem of padding) close to
+ * square between 15rem and 20rem wide, keeping the v0.4.x QR size (about
+ * 230 px on a 320 px phone, 290 px on a 375 px phone). Was 0.93 when the
+ * bands were thin. 20rem caps it on large screens; the cqh term shrinks it on
+ * short ones. The image keeps object-fit: contain, so non-square artwork is
+ * letterboxed on white, never stretched or cropped.
  */
 .checkout__face[data-presentation='square'] {
-  --face-ratio: 0.93;
+  --face-ratio: 0.82;
   --face-max: 20rem;
 }
 
@@ -1017,11 +1083,12 @@ html.checkout-open body {
 }
 
 /*
- * PDF417: two-dimensional but wide. Keeps the v0.4.1 "2D" face (a little
- * taller than a credit card, tighter padding); never the square QR face.
+ * PDF417: two-dimensional but wide. A face between the linear and square
+ * ones (was 1.35 with thin bands), with tighter padding; never the square QR
+ * face.
  */
 .checkout__face[data-presentation='stacked'] {
-  --face-ratio: 1.35;
+  --face-ratio: 1.2;
 }
 
 .checkout__face[data-presentation='stacked'] .checkout__code {
@@ -1049,12 +1116,62 @@ html.checkout-open body {
 
 .checkout__band {
   flex: none;
-  height: 0.875rem;
   background: var(--card-accent, #455a64);
 }
 
+/*
+ * Upper band: icon and name laid out like the wallet tile's (left-aligned,
+ * same horizontal padding as the code area), in the palette's text color so
+ * the icon and name follow the tile's light/dark rule. Same soft sheen as the
+ * tile.
+ */
+.checkout__band--top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--checkout-band-top);
+  padding: var(--space-1) var(--space-4);
+  background-image: linear-gradient(160deg, rgb(255 255 255 / 0.12), transparent 70%);
+  color: var(--card-on-accent, #ffffff);
+}
+
+.checkout__icon {
+  flex: none;
+  width: 1.875rem;
+  height: 1.875rem;
+}
+
+.checkout__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * Store name: the tile's typography (app font, regular weight) at a larger
+ * size. Long names wrap (anywhere, so one very long word cannot overflow) to
+ * at most two lines and are then clamped inside the fixed-height band, so
+ * they never push into the code area; the element's text, and so the
+ * dialog's accessible name, is always the complete name.
+ */
+.checkout__store {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--card-name-font);
+  font-size: clamp(1.0625rem, 4.6vw, 1.2rem);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
 .checkout__band--bottom {
-  height: 0.375rem;
+  height: var(--checkout-band-bottom);
 }
 
 /* Barcode area inside the card; the image carries its own quiet zone. */
@@ -1158,7 +1275,7 @@ html.checkout-open body {
  * Short screens (iPhone SE / mini portrait, phones in landscape): shrink the
  * header and stage padding first so the card keeps as much height as
  * possible. Below 460px tall (landscape) the name is limited to one line and
- * its reserve reduced to match.
+ * the bands are slimmed so the code keeps most of the card.
  */
 @media (max-height: 640px) {
   .checkout__stage {
@@ -1168,7 +1285,8 @@ html.checkout-open body {
 
 @media (max-height: 460px) {
   .checkout {
-    --checkout-title-reserve: 1.9rem;
+    --checkout-band-top: 2.25rem;
+    --checkout-band-bottom: 0.5rem;
   }
 
   /* Landscape phones: the card needs every pixel; tuck the header up. */
@@ -1181,8 +1299,9 @@ html.checkout-open body {
     padding-block: var(--space-2);
   }
 
-  .checkout__card {
-    gap: var(--space-1);
+  .checkout__icon {
+    width: 1.5rem;
+    height: 1.5rem;
   }
 
   .checkout__store {

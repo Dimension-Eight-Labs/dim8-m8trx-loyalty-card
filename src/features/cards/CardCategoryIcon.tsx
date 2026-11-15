@@ -9,13 +9,15 @@
  * Drawing rules, shared by every icon so they read as one set:
  * - one 24×24 viewBox, artwork kept inside roughly 2–22 on both axes;
  * - strokes only (no fills), width 2, round caps and joins;
- * - white strokes on a transparent background.
+ * - strokes in `currentColor` on a transparent background.
  *
- * Contrast: white strokes read well on the ten dark palette colors but
- * poorly on the light ones (Yellow, Orange, White). For those, `halo` draws
- * the same paths first in a wider, dark, semi-opaque stroke, giving a thin
- * outline under the white line. It is an outline, not a blur or drop shadow,
- * and is omitted entirely on dark tiles.
+ * Contrast (v0.6.1): the icon inherits the surrounding text color, so on
+ * every surface that shows a card (wallet tile, card-menu header, checkout
+ * band, icon-picker preview) it is exactly the palette's paired text color
+ * from tileColors.ts: charcoal on the light colors (Orange, Yellow, White)
+ * and white on the dark ones. That pairing is already chosen for at least
+ * 4.5:1 contrast, so no outline is needed. v0.6.0's white strokes with a dark
+ * "halo" under-stroke on light tiles were removed after iPhone testing.
  *
  * Decorative: the SVG is aria-hidden. The tile is named by the card name and
  * the picker labels each option with its category name.
@@ -24,9 +26,6 @@ import type { ReactNode } from 'react'
 import type { CardIconId } from './cardIcons.ts'
 
 const STROKE = 2
-/** Halo width: one extra unit on each side of the white stroke. */
-const HALO_STROKE = STROKE + 2
-const HALO_COLOR = 'rgb(0 0 0 / 0.72)'
 
 /** Path data per category; each value is one or more SVG elements. */
 const ARTWORK: Record<CardIconId, ReactNode> = {
@@ -89,12 +88,11 @@ const ARTWORK: Record<CardIconId, ReactNode> = {
 
 export interface CardCategoryIconProps {
   icon: CardIconId
-  /** Draw a dark outline under the white strokes (for light tile colors). */
-  halo?: boolean
   className?: string
 }
 
-export function CardCategoryIcon({ icon, halo = false, className }: CardCategoryIconProps) {
+/** Renders in the inherited text color; set `color` on an ancestor. */
+export function CardCategoryIcon({ icon, className }: CardCategoryIconProps) {
   const artwork = ARTWORK[icon]
   return (
     <svg
@@ -107,12 +105,7 @@ export function CardCategoryIcon({ icon, halo = false, className }: CardCategory
       focusable="false"
       data-icon={icon}
     >
-      {halo && (
-        <g stroke={HALO_COLOR} strokeWidth={HALO_STROKE} data-part="halo">
-          {artwork}
-        </g>
-      )}
-      <g stroke="#ffffff" strokeWidth={STROKE}>
+      <g stroke="currentColor" strokeWidth={STROKE}>
         {artwork}
       </g>
     </svg>

@@ -20,15 +20,15 @@
  * The picker has no `accept` filter: iOS greys out files whose extension it
  * doesn't recognise (such as .m8trx), and the content is validated anyway.
  *
- * Visibility (v0.6.0): the backup controls sit near the bottom of a long
- * screen, so the inline "Backup ready" section (and an inline error) can
- * appear below the visible area on a phone, leaving the user unsure whether
- * anything happened. When either appears it is scrolled into view with
- * `block: 'nearest'` (the smallest scroll that shows it, none if it is
- * already visible), smoothly unless the user prefers reduced motion. Its CSS
- * scroll margins keep it clear of the screen edge and the iOS home-indicator
- * safe area. Focus then moves to Save backup without a second scroll. The
- * oversized-export warning is a modal dialog and is always on screen.
+ * Visibility (v0.6.0, refined in v0.6.1): the backup controls sit near the
+ * bottom of a long screen, so the inline "Backup ready" section (and an
+ * inline error) can appear below the visible area on a phone, leaving the
+ * user unsure whether anything happened. When either appears, the page
+ * scrolls just far enough to show all of it, lower border included, with a
+ * little space below it and clear of the iOS home indicator; nothing scrolls
+ * if it already fits (see revealSection). Smooth unless the user prefers
+ * reduced motion. Focus then moves to Save backup without a second scroll.
+ * The oversized-export warning is a modal dialog and is always on screen.
  *
  * Everything happens on the device; nothing is sent anywhere.
  */
@@ -85,7 +85,7 @@ export function BackupControls({
 
   // Show the newly revealed "Backup ready" section, then put keyboard and
   // screen-reader users on its next step. If the section could not be
-  // scrolled (no scrollIntoView), let focus scroll it into view instead.
+  // measured (see revealSection), let focus scroll it into view instead.
   useEffect(() => {
     if (!ready) return
     const revealed = revealSection(readyRef.current)
@@ -227,16 +227,71 @@ export function BackupControls({
   )
 }
 
+/** Minimum space kept above the revealed panel (matches app.css's --space-4). */
+const MIN_TOP_CLEARANCE_PX = 16
 /**
- * Scrolls `element` the minimum distance needed to show it (nothing if it is
- * already visible). Returns false when it could not try (no element, or a
- * browser without scrollIntoView), so the caller can fall back.
+ * Minimum space kept below the panel's lower border (matches app.css's
+ * --space-6). The CSS scroll margin normally adds the iOS safe-area inset on
+ * top of this; the minimum still applies if the margin can't be read.
+ */
+const MIN_BOTTOM_CLEARANCE_PX = 24
+
+/**
+ * Scrolls the page the minimum distance needed to show all of `element`,
+ * including its lower border plus a little clearance; does nothing if it is
+ * already fully visible. Returns false when it could not measure (no element,
+ * no layout APIs, or no layout box), so the caller can let focus scroll it
+ * instead.
+ *
+ * Why not `scrollIntoView({ block: 'nearest' })` (v0.6.0): on iPhone the panel
+ * stopped part-way, with its lower edge still hidden. Mobile Safari's visible
+ * area is the *visual* viewport, which its toolbars (and the keyboard) make
+ * shorter than the layout viewport that scrollIntoView aligns to, and scroll
+ * margins were not reliably honored. So the geometry is computed here:
+ * - visible area: `window.visualViewport` when available (offsetTop/height
+ *   are in layout-viewport coordinates, the same space as
+ *   getBoundingClientRect), else the layout viewport;
+ * - clearance: the element's computed scroll margins, which app.css sets to
+ *   a small gap plus `env(safe-area-inset-bottom)` so the panel stops above
+ *   the home indicator, never less than the minimums above;
+ * - if the panel is taller than the visible area, its top edge is kept in
+ *   view rather than its bottom, so its heading and text are never skipped.
+ * Smooth scrolling is used unless the user prefers reduced motion.
  */
 function revealSection(element: HTMLElement | null): boolean {
-  if (!element || typeof element.scrollIntoView !== 'function') return false
+  if (!element || typeof element.getBoundingClientRect !== 'function' || typeof window.scrollBy !== 'function') return false
+  const rect = element.getBoundingClientRect()
+  // No box (not laid out, or an environment without layout): nothing to measure.
+  if (rect.width === 0 && rect.height === 0) return false
+  const style = window.getComputedStyle(element)
+  const marginTop = Math.max(MIN_TOP_CLEARANCE_PX, pixels(style.scrollMarginTop))
+  const marginBottom = Math.max(MIN_BOTTOM_CLEARANCE_PX, pixels(style.scrollMarginBottom))
+  const viewport = visibleArea()
+
+  // Positive: how far the panel's top may move up and still stay in view.
+  const roomAbove = rect.top - (viewport.top + marginTop)
+  const hiddenBelow = rect.bottom + marginBottom - viewport.bottom
+  let delta = 0
+  if (hiddenBelow > 0) delta = Math.max(0, Math.min(hiddenBelow, roomAbove))
+  else if (roomAbove < 0) delta = roomAbove
+  if (delta === 0) return true
+
   const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' })
+  window.scrollBy({ top: delta, left: 0, behavior: reduceMotion ? 'auto' : 'smooth' })
   return true
+}
+
+/** The visible part of the page, in getBoundingClientRect coordinates. */
+function visibleArea(): { top: number; bottom: number } {
+  const visual = window.visualViewport
+  if (visual && visual.height > 0) return { top: visual.offsetTop, bottom: visual.offsetTop + visual.height }
+  return { top: 0, bottom: window.innerHeight || document.documentElement.clientHeight }
+}
+
+/** A computed CSS length in px; 0 if it isn't a plain px value (e.g. unresolved calc()). */
+function pixels(value: string | undefined): number {
+  const text = (value ?? '').trim()
+  return /^\d*\.?\d+px$/.test(text) ? Number.parseFloat(text) : 0
 }
 
 function messageOf(error: unknown, fallback: string): string {

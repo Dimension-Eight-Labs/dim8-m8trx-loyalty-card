@@ -6,7 +6,9 @@
  *
  * Each colour pairs a background with the text colour that reads best on it.
  * Contrast of the store name (WCAG 2.x, computed from these hex values) is at
- * least 4.5:1 for every pair; the tile names are also large and bold.
+ * least 4.5:1 for every pair. Category icons are drawn in the same text
+ * color (CardCategoryIcon uses currentColor), so this one pairing governs the
+ * name and icon on the wallet tile, the card-menu header and checkout.
  */
 export interface TileColor {
   id: string
@@ -43,15 +45,6 @@ export function tileColor(id: string): TileColor {
     TILE_COLORS.find((color) => color.id === id) ??
     (TILE_COLORS.find((color) => color.id === DEFAULT_TILE_COLOR_ID) as TileColor)
   )
-}
-
-/**
- * True for the light palette entries (dark text: Orange, Yellow, White).
- * White category icons need a dark outline to stay legible on these; see
- * CardCategoryIcon.tsx.
- */
-export function isLightTile(color: TileColor): boolean {
-  return color.text !== '#ffffff'
 }
 
 /** Deterministic colour for migrated cards, so existing cards get varied tiles. */

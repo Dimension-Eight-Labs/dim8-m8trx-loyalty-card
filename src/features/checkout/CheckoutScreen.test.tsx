@@ -12,9 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CardBarcode, LoyaltyCard } from '../cards/card.ts'
 import { CheckoutScreen } from './CheckoutScreen.tsx'
 
-function makeCard(id: string, storeName: string, barcode: CardBarcode): LoyaltyCard {
+function makeCard(id: string, storeName: string, barcode: CardBarcode, extra: Partial<LoyaltyCard> = {}): LoyaltyCard {
   const at = '2026-01-01T00:00:00.000Z'
-  return { id, schemaVersion: 2, storeName, color: 'slate', barcode, createdAt: at, updatedAt: at }
+  return { id, schemaVersion: 2, storeName, color: 'slate', barcode, createdAt: at, updatedAt: at, ...extra }
 }
 
 const image = (detectedFormat?: string): CardBarcode => ({
@@ -56,8 +56,21 @@ describe('CheckoutScreen card-face presentation', () => {
     ['an imported image with no detected format', image(), 'card'],
     ['a text-only card', { kind: 'text', value: '12345' }, 'card'],
   ] as Array<[string, CardBarcode, string]>)('gives %s the %s face', (_name, barcode, expected) => {
-    renderCheckout([makeCard('a', 'Shop', barcode)])
-    expect(screen.getByTestId('checkout-card')).toHaveAttribute('data-presentation', expected)
+    renderCheckout([makeCard('a', 'Shop', barcode, { icon: 'retail' })])
+    const face = screen.getByTestId('checkout-card')
+    expect(face).toHaveAttribute('data-presentation', expected)
+    // v0.6.1: the code still renders, alone, in the white code area between
+    // the bands, unaffected by the title and icon moving into the upper band.
+    const code = within(face).getByTestId('checkout-code')
+    const rendered = code.querySelector('.barcode')
+    expect(rendered).not.toBeNull()
+    expect(code.children).toHaveLength(1)
+    expect(within(code).queryByRole('heading')).not.toBeInTheDocument()
+    expect(code.querySelector('svg[data-icon]')).toBeNull()
+    const [top, middle, bottom] = Array.from(face.children)
+    expect(top).toBe(within(face).getByTestId('checkout-band'))
+    expect(middle).toBe(code)
+    expect(bottom).toHaveClass('checkout__band', 'checkout__band--bottom')
   })
 
   it('shows imported QR artwork as the saved image (not redrawn) inside the square face', () => {
@@ -83,11 +96,43 @@ describe('CheckoutScreen card-face presentation', () => {
 describe('CheckoutScreen layout', () => {
   const LONG = 'The Extraordinarily Long Neighbourhood Wholefoods Co-operative Members Rewards Programme'
 
-  it('keeps the complete long name as the dialog label and the caption text', () => {
+  it('keeps the complete long name as the dialog label and the band title text', () => {
     renderCheckout([makeCard('a', LONG, { kind: 'generated', format: 'qrcode', value: 'M' })])
     expect(screen.getByRole('dialog', { name: LONG })).toBeInTheDocument()
     const heading = screen.getByRole('heading', { level: 1, name: LONG })
-    expect(heading.nextElementSibling).toBe(screen.getByTestId('checkout-card'))
+    expect(heading).toHaveTextContent(LONG)
+    expect(screen.getByTestId('checkout-band')).toContainElement(heading)
+  })
+
+  it('puts the category icon to the left of the title inside the upper colored band', () => {
+    renderCheckout([makeCard('a', 'Morning Brew', { kind: 'generated', format: 'qrcode', value: 'M' }, { icon: 'coffee' })])
+    const face = screen.getByTestId('checkout-card')
+    const band = within(face).getByTestId('checkout-band')
+    expect(band.parentElement).toBe(face)
+    const [iconSlot, title] = Array.from(band.children)
+    expect(iconSlot!.querySelector('svg[data-icon="coffee"]')).toHaveAttribute('aria-hidden', 'true')
+    expect(title).toBe(screen.getByRole('heading', { level: 1, name: 'Morning Brew' }))
+  })
+
+  it('shows only the title in the band when no icon is chosen', () => {
+    renderCheckout([makeCard('a', 'Plain', { kind: 'generated', format: 'code128', value: '1' })])
+    const band = screen.getByTestId('checkout-band')
+    expect(band.querySelector('svg[data-icon]')).toBeNull()
+    expect(Array.from(band.children)).toEqual([screen.getByRole('heading', { level: 1, name: 'Plain' })])
+  })
+
+  it.each([
+    ['a light color (White): charcoal', 'white', '#eceff1', '#1a1a1a'],
+    ['a light color (Orange): charcoal', 'orange', '#f57c00', '#1a1a1a'],
+    ['a dark color (Indigo): white', 'indigo', '#3949ab', '#ffffff'],
+  ])('uses the tile’s title/icon color on %s', (_name, color, background, text) => {
+    renderCheckout([makeCard('a', 'Shop', { kind: 'generated', format: 'code128', value: '1' }, { color, icon: 'events' })])
+    const face = screen.getByTestId('checkout-card')
+    expect(face.style.getPropertyValue('--card-accent')).toBe(background)
+    expect(face.style.getPropertyValue('--card-on-accent')).toBe(text)
+    const strokes = within(face).getByTestId('checkout-band').querySelector('svg[data-icon="events"] g')
+    expect(strokes).toHaveAttribute('stroke', 'currentColor')
+    expect(face.querySelector('[data-part="halo"]')).toBeNull()
   })
 
   it('places the shared M8TRX header (logo then title) upper left, with the × on the right, above the name', () => {

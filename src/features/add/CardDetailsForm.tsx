@@ -113,7 +113,7 @@ export function CardDetailsForm({ barcode, artwork = false, defaultColor, focusO
         )}
       </div>
 
-      <ColorPicker name="new-card-color" value={color} onChange={setColor} />
+      <ColorPicker name="new-card-color" legend="Color" value={color} onChange={setColor} />
       <IconPicker name="new-card-icon" value={icon} color={color} onChange={setIcon} />
 
       <div role="alert">{saveError && <p className="notice notice--error">{saveError}</p>}</div>

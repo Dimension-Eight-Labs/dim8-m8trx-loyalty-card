@@ -9,7 +9,8 @@
  * small artwork alone), and the radio's accessible name is that label.
  *
  * Each option previews the icon on the currently chosen tile colour, so the
- * user sees exactly what the tile will look like. The selected option gets a
+ * user sees exactly what the tile will look like (the icon takes the
+ * palette's text color, as on the tile). The selected option gets a
  * thick ring (shape, not colour alone, marks selection).
  *
  * `value` null means None; the picker never chooses an icon by itself.
@@ -17,7 +18,7 @@
 import type { CSSProperties } from 'react'
 import { CARD_ICONS, type CardIconId } from './cardIcons.ts'
 import { CardCategoryIcon } from './CardCategoryIcon.tsx'
-import { isLightTile, tileColor } from './tileColors.ts'
+import { tileColor } from './tileColors.ts'
 
 export interface IconPickerProps {
   value: CardIconId | null
@@ -31,7 +32,6 @@ export interface IconPickerProps {
 
 export function IconPicker({ value, onChange, color, name, legend = 'Icon' }: IconPickerProps) {
   const colors = tileColor(color)
-  const halo = isLightTile(colors)
   const swatchStyle: CSSProperties = { background: colors.background, color: colors.text }
   const options: Array<{ id: CardIconId | null; label: string }> = [{ id: null, label: 'None' }, ...CARD_ICONS]
 
@@ -52,7 +52,7 @@ export function IconPicker({ value, onChange, color, name, legend = 'Icon' }: Ic
                 onChange={() => onChange(option.id)}
               />
               <span className="icon-picker__swatch" style={swatchStyle} aria-hidden="true">
-                {option.id && <CardCategoryIcon icon={option.id} halo={halo} className="icon-picker__icon" />}
+                {option.id && <CardCategoryIcon icon={option.id} className="icon-picker__icon" />}
               </span>
               <span className="icon-picker__label">{option.label}</span>
             </label>

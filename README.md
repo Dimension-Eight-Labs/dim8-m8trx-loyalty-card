@@ -13,14 +13,15 @@ The product does one job on purpose. It has **no accounts, advertisements,
 analytics, cloud backend, or synchronization**, and it loads nothing from
 third-party hosts.
 
-## Current status (v0.6.0, development)
+## Current status (v0.6.1, development)
 
 M8TRX keeps your cards and scannable codes together, right on your device:
 capture a card's barcode or QR code once, then show a clean, freshly drawn
 code at checkout.
 
-- **Wallet home screen**: a grid of square, colored tiles of identical size.
-  Each shows an optional white line-art **category icon** in the upper-left
+- **Wallet home screen**: a grid of short (3:2), colored tiles of identical
+  size. Each shows an optional line-art **category icon** (in the tile's text
+  color: charcoal on light colors, white on dark) in the upper-left
   corner and the card name on **one line** at the bottom (long names end in
   an ellipsis; the full name is kept, announced to screen readers and shown
   at checkout). No barcode symbol or card number is shown. Tap a tile to open
@@ -32,12 +33,12 @@ code at checkout.
   card.
 - **Shared M8TRX header** on every screen: the official DIM8 logo and
   **M8TRX** in the upper-left corner.
-- **Checkout mode**: the shared M8TRX header at the top, then the store name
-  (in the DIM8 VFD colour) immediately above the card, which floats as a
-  centred white tile (thin bands in the card's colour, barcode scaled to
-  fit) on a dark stage with the subtle M8TRX circuit backdrop. Linear codes
-  use a compact credit-card face; QR codes (redrawn or saved artwork) use a
-  larger near-square face. Pagination chevrons and dots are at the bottom; a
+- **Checkout mode**: the shared M8TRX header at the top, then the card,
+  floating on a dark stage with the subtle M8TRX circuit backdrop as an
+  enlarged version of its wallet tile: a tall upper band in the card's color
+  with its icon and name, the barcode scaled to fit on white, and a lower
+  band in the same color. Linear codes use a card-shaped face; QR codes
+  (redrawn or saved artwork) use a taller near-square face. Pagination chevrons and dots are at the bottom; a
   small **×** is in the top corner. Close with the **×**, Escape, or a deliberate swipe
   down. Swipe left/right (or use ←/→ or the small chevrons) to move between
   cards; navigation stops at the first/last card. Page scrolling is locked, and the
@@ -64,6 +65,32 @@ code at checkout.
   migrated automatically and are never deleted.
 - Dark interface in the official DIM8 Labs palette, keyboard accessible; no accounts, backend, analytics, or
   third-party requests.
+
+### v0.6.1 — Mobile UI refinement
+
+Follow-up to physical-iPhone testing of v0.6.0. Not yet validated on a
+physical iPhone (see the checklist under *Testing*). No storage, schema or
+backup-format change.
+
+- **Shorter tiles.** Wallet tiles are 3:2 rectangles instead of squares;
+  icon slot, ⋯ button, one-line name and grid are unchanged.
+- **Icon color.** Category icons are drawn in the tile's own text color —
+  charcoal on Orange, Yellow and White, white on the dark colors — on the
+  tile, the card-menu header, checkout and the icon picker. The v0.6.0 dark
+  outline under white icons is gone.
+- **Add Card** labels the color picker **Color** (next to **Icon**).
+- **Export panel.** **Export all cards** now scrolls the whole "Backup
+  ready" panel into view, lower border included, with a little space below
+  it, measured against Mobile Safari's visible (visual) viewport and clear of
+  the home indicator. Nothing scrolls if it already fits.
+- **Card menu.** A colored header in the card's own color shows its icon
+  and full name, with a top-right **×** (Close) button replacing the Cancel
+  row. Each action has a small line icon; actions, order, disabled states,
+  Escape/backdrop closing and the delete confirmation are unchanged.
+- **Checkout card.** The store name and icon moved into a taller upper
+  colored band; the lower band is twice as tall. Faces are slightly taller to
+  give the code area back that height, so QR codes keep their size. Barcode
+  rendering is unchanged.
 
 ### v0.6.0 — UI polish and card tile redesign
 
@@ -819,6 +846,25 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
 These do not prove behaviour on a phone. See the checklist below.
 
 ### Real-device checklist (not verifiable in host tests)
+
+**v0.6.1 physical-iPhone acceptance (mobile UI refinement).** None of
+these have been performed yet; record results per item.
+
+1. Wallet tiles are shorter, all the same size, with or without an icon;
+   the ⋯ button is still easy to tap and long names end in "…".
+2. Icons are charcoal on Orange, Yellow and White and white on dark colors,
+   matching the name, on tiles, the card-menu header and checkout.
+3. Add Card shows **Color** and **Icon**.
+4. Export all cards (portrait and landscape, Safari and home-screen app):
+   the whole "Backup ready" panel including its lower border is visible with
+   a little space below it, clear of the toolbar and home indicator; no
+   scroll when it already fits; Save backup works.
+5. ⋯ menu: the colored header clearly identifies the card (long names, icon
+   and no-icon cards); the × and a backdrop tap close it; every action and
+   the delete confirmation still work; disabled move actions look disabled.
+6. Checkout: name and icon sit in the upper band without crowding long
+   names; the lower band looks balanced; real scanners read linear, QR and
+   PDF417 codes as before.
 
 **v0.6.0 physical-iPhone acceptance (UI polish and tile redesign).** None
 of these have been performed yet; record results per item.

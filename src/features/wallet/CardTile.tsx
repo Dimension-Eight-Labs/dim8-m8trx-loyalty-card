@@ -1,7 +1,9 @@
 /**
- * One square wallet tile (redesigned in v0.6.0): the card's colour, an
- * optional category icon in the upper-left corner, and the card name on a
- * single line in a fixed lower band.
+ * One wallet tile (redesigned in v0.6.0; shortened to a 3:2 rectangle in
+ * v0.6.1): the card's color, an optional category icon in the upper-left
+ * corner, and the card name on a single line in a fixed lower band. The icon
+ * and name share the palette's text color (charcoal on light colors, white on
+ * dark ones; see tileColors.ts), set once on the <li>.
  *
  * Layout invariants (see `.tile` in app.css): the icon slot and the name band
  * have fixed positions and sizes whether or not an icon is set, and the name
@@ -27,7 +29,7 @@ import { useEffect, useRef } from 'react'
 import { MoreIcon } from '../../components/icons.tsx'
 import type { LoyaltyCard } from '../cards/card.ts'
 import { CardCategoryIcon } from '../cards/CardCategoryIcon.tsx'
-import { isLightTile, tileColor } from '../cards/tileColors.ts'
+import { tileColor } from '../cards/tileColors.ts'
 import type { TileDragHandlers } from './useWalletReorder.ts'
 
 export interface CardTileProps {
@@ -72,7 +74,7 @@ export function CardTile({ card, onOpen, onOpenMenu, dragHandlers, dragging = fa
       >
         {/* The slot is always rendered so tiles with and without an icon match. */}
         <span className="tile__icon" data-testid="tile-icon-slot">
-          {card.icon && <CardCategoryIcon icon={card.icon} halo={isLightTile(colors)} />}
+          {card.icon && <CardCategoryIcon icon={card.icon} />}
         </span>
         <span className="tile__name" title={card.storeName}>
           {card.storeName}

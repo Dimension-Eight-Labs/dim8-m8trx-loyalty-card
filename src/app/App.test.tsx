@@ -588,7 +588,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'First' })).toHaveFocus()
   })
 
-  it('shows M8TRX at the top, the name immediately above the card, and pagination below the stage', async () => {
+  it('shows M8TRX at the top, the name in the card’s upper band, and pagination below the stage', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Corner Coffee', '0012', 'Code 128', 'Green')
     await addManualCard(user, 'Second', '2')
@@ -604,12 +604,13 @@ describe('App', () => {
     expect(within(header).getByRole('button', { name: 'Close card' })).toBeInTheDocument()
     expect(within(header).queryByRole('heading')).not.toBeInTheDocument()
 
-    // The name is the card's caption: in the stage, the face's immediate predecessor.
+    // The name sits inside the card face, in its upper colored band (v0.6.1),
+    // above the white code area.
     const stage = screen.getByTestId('checkout-stage')
     const face = within(stage).getByTestId('checkout-card')
     const heading = within(stage).getByRole('heading', { level: 1, name: 'Corner Coffee' })
-    expect(heading.nextElementSibling).toBe(face)
-    expect(within(face).getByRole('img', { name: /code 128/i })).toBeInTheDocument()
+    expect(heading.parentElement).toBe(within(face).getByTestId('checkout-band'))
+    expect(within(face).getByTestId('checkout-code')).toContainElement(within(face).getByRole('img', { name: /code 128/i }))
     // A linear code keeps the compact credit-card face.
     expect(face).toHaveAttribute('data-presentation', 'card')
 
@@ -619,24 +620,25 @@ describe('App', () => {
     expect(within(info).queryByRole('heading')).not.toBeInTheDocument()
     expect(stage.nextElementSibling).toBe(info)
 
-    // Document order: M8TRX, then the name, then the card, then pagination.
+    // Document order: M8TRX, then the name, then the code, then pagination.
     const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
     expect(follows(brand, heading)).toBe(true)
-    expect(follows(heading, face)).toBe(true)
+    expect(follows(heading, within(face).getByTestId('checkout-code'))).toBe(true)
     expect(follows(face, info)).toBe(true)
 
     // The accent is local to the card face, not the whole screen.
     expect(face.style.getPropertyValue('--card-accent')).toBe('#2e7d32')
+    expect(face.style.getPropertyValue('--card-on-accent')).toBe('#ffffff')
     expect(checkout.style.getPropertyValue('--card-accent')).toBe('')
   })
 
-  it('shows the store name above the card even without pagination (single card)', async () => {
+  it('shows the store name in the card band even without pagination (single card)', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Only', '1')
     await user.click(screen.getByRole('button', { name: 'Only' }))
 
     const heading = within(screen.getByTestId('checkout-stage')).getByRole('heading', { level: 1, name: 'Only' })
-    expect(heading.nextElementSibling).toBe(screen.getByTestId('checkout-card'))
+    expect(screen.getByTestId('checkout-band')).toContainElement(heading)
     expect(screen.queryByRole('button', { name: 'Next card' })).not.toBeInTheDocument()
   })
 
@@ -1576,7 +1578,8 @@ describe('UI polish and category icons (v0.6.0)', () => {
   it('uses American English for colors throughout the add and edit flows', async () => {
     const { user } = renderApp()
     await openDetails(user)
-    expect(screen.getByRole('group', { name: 'Tile color' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Color' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Tile color' })).not.toBeInTheDocument()
     expect(document.body).not.toHaveTextContent(/colour/i)
     await user.type(screen.getByLabelText('Store name'), 'Shop')
     await user.click(screen.getByRole('button', { name: 'Save card' }))
@@ -1590,12 +1593,18 @@ describe('UI polish and category icons (v0.6.0)', () => {
   it('offers an optional icon picker below the color picker, defaulting to None', async () => {
     const { user } = renderApp()
     await openDetails(user)
-    const colors = screen.getByRole('group', { name: 'Tile color' })
+    // Add Card labels the adjacent pickers "Color" and "Icon" (v0.6.1).
+    const colors = screen.getByRole('group', { name: 'Color' })
     const icons = screen.getByRole('group', { name: 'Icon' })
     expect(colors.nextElementSibling).toBe(icons)
     const radios = within(icons).getAllByRole('radio')
     expect(radios.map((radio) => radio.getAttribute('value'))).toEqual(['none', 'fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events'])
     expect(within(icons).getByRole('radio', { name: 'None' })).toBeChecked()
+    // Previews draw each icon in the chosen color's text color, like the tile.
+    for (const preview of icons.querySelectorAll('svg[data-icon]')) {
+      expect(preview.querySelector('g')).toHaveAttribute('stroke', 'currentColor')
+      expect(preview.querySelector('[data-part="halo"]')).toBeNull()
+    }
     for (const label of ['Fitness', 'Grocery', 'Fuel', 'Hardware', 'Food', 'Coffee', 'Retail', 'Events']) {
       expect(within(icons).getByRole('radio', { name: label })).not.toBeChecked()
       expect(within(icons).getByText(label)).toBeVisible()
@@ -1639,6 +1648,7 @@ describe('UI polish and category icons (v0.6.0)', () => {
 
     await user.click(screen.getByRole('button', { name: 'Options for Gas & Go' }))
     const items = within(screen.getByRole('dialog')).getAllByRole('button').map((button) => button.textContent)
+    expect(items[0]).toBe('') // the header's Close × (named by aria-label)
     expect(items.indexOf('Change icon')).toBe(items.indexOf('Change color') + 1)
     await user.click(screen.getByRole('button', { name: 'Change icon' }))
     expect(screen.getByRole('heading', { name: 'Change icon' })).toBeInTheDocument()
@@ -1650,8 +1660,11 @@ describe('UI polish and category icons (v0.6.0)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     const fuel = screen.getByRole('button', { name: 'Gas & Go' }).querySelector('svg[data-icon="fuel"]')
     expect(fuel).toBeInTheDocument()
-    // Yellow is a light tile: the white strokes get a dark outline.
-    expect(fuel!.querySelector('[data-part="halo"]')).toBeInTheDocument()
+    // Yellow is a light tile: the icon is drawn in the tile's charcoal text
+    // color (currentColor), with no outline layer.
+    expect(fuel!.querySelector('[data-part="halo"]')).not.toBeInTheDocument()
+    expect(fuel!.querySelector('g')).toHaveAttribute('stroke', 'currentColor')
+    expect(screen.getByRole('button', { name: 'Gas & Go' }).closest('li')).toHaveStyle({ color: '#1a1a1a' })
     expect(screen.getByRole('button', { name: 'Options for Gas & Go' })).toHaveFocus()
     expect((await makeRepository().list())[0]).toMatchObject({ icon: 'fuel', color: 'yellow', storeName: 'Gas & Go' })
 
@@ -1683,41 +1696,107 @@ describe('UI polish and category icons (v0.6.0)', () => {
       expect(Array.from(button.children, (child) => child.className)).toEqual(['tile__icon', 'tile__name'])
     }
 
+    // Green is a dark tile: name and icon are both white (currentColor).
+    expect(tile.closest('li')).toHaveStyle({ background: '#2e7d32', color: '#ffffff' })
+    expect(tile.querySelector('svg[data-icon="hardware"] g')).toHaveAttribute('stroke', 'currentColor')
+
     await user.click(tile)
-    expect(within(screen.getByTestId('checkout-stage')).getByRole('heading', { level: 1, name: longName })).toBeInTheDocument()
+    expect(within(screen.getByTestId('checkout-band')).getByRole('heading', { level: 1, name: longName })).toBeInTheDocument()
   })
 
-  it('scrolls the inline “Backup ready” section into view and focuses Save backup', async () => {
-    const repository = makeRepository()
-    await repository.create({ storeName: 'Shop', color: 'teal', barcode: { kind: 'generated', format: 'code128', value: 'S1' } })
-    const scrolled: Array<{ element: Element; options: unknown }> = []
-    const scrollIntoView = vi.fn(function (this: Element, options?: unknown) {
-      scrolled.push({ element: this, options })
+  describe('revealing the inline “Backup ready” panel (v0.6.1)', () => {
+    // jsdom has no layout, so the panel's box and the visible (visual)
+    // viewport are faked. CSS is not loaded in tests, so the reveal uses its
+    // minimum clearances: 16px above, 24px below.
+    const originalRect = HTMLElement.prototype.getBoundingClientRect
+    const originalScrollBy = window.scrollBy
+    const originalMatchMedia = window.matchMedia
+    let panelBox: { top: number; bottom: number }
+    let scrollBy: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      scrollBy = vi.fn()
+      window.scrollBy = scrollBy as unknown as typeof window.scrollBy
+      HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+        if (this.dataset.testid !== 'backup-ready') return originalRect.call(this)
+        const { top, bottom } = panelBox
+        return { top, bottom, left: 16, right: 374, width: 358, height: bottom - top, x: 16, y: top, toJSON: () => ({}) } as DOMRect
+      }
     })
-    Element.prototype.scrollIntoView = scrollIntoView
-    try {
+
+    afterEach(() => {
+      HTMLElement.prototype.getBoundingClientRect = originalRect
+      window.scrollBy = originalScrollBy
+      window.matchMedia = originalMatchMedia
+      delete (window as { visualViewport?: unknown }).visualViewport
+    })
+
+    function setVisualViewport(offsetTop: number, height: number) {
+      Object.defineProperty(window, 'visualViewport', { configurable: true, value: { offsetTop, height } })
+    }
+
+    async function exportAll() {
+      const repository = makeRepository()
+      await repository.create({ storeName: 'Shop', color: 'teal', barcode: { kind: 'generated', format: 'code128', value: 'S1' } })
       const saveFile = vi.fn(async () => 'downloaded' as const)
       const user = userEvent.setup()
       render(<App repository={repository} capture={fakeCapture()} saveFile={saveFile} />)
-      await user.click(await screen.findByRole('button', { name: /add card/i }))
-      const before = scrollIntoView.mock.calls.length
-      await user.click(screen.getByRole('button', { name: /export all cards/i }))
-
+      await screen.findByRole('button', { name: 'Shop' }) // wallet loaded
+      await user.click(screen.getByRole('button', { name: /add card/i }))
+      await user.click(await screen.findByRole('button', { name: /export all cards/i }))
       const save = await screen.findByRole('button', { name: 'Save backup' })
-      const ready = screen.getByTestId('backup-ready')
-      const calls = scrolled.slice(before)
-      expect(calls).toHaveLength(1)
-      expect(calls[0]!.element).toBe(ready)
-      expect(calls[0]!.options).toMatchObject({ block: 'nearest' })
-      expect(ready).toContainElement(save)
+      return { user, save, saveFile, repository }
+    }
+
+    it('scrolls a clipped panel so its lower border and clearance are visible, then focuses Save backup', async () => {
+      // Safari toolbars: the visible area (600px) is shorter than the layout
+      // viewport (jsdom's 768px), and the panel's bottom (700) lies between them.
+      setVisualViewport(0, 600)
+      panelBox = { top: 500, bottom: 700 }
+      const { user, save, saveFile, repository } = await exportAll()
+
+      expect(screen.getByTestId('backup-ready')).toContainElement(save)
+      expect(scrollBy).toHaveBeenCalledTimes(1)
+      // 700 + 24 clearance − 600 visible bottom.
+      expect(scrollBy).toHaveBeenCalledWith({ top: 124, left: 0, behavior: 'smooth' })
       expect(save).toHaveFocus()
       // Export contents and cards are unaffected.
       await user.click(save)
       await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1))
       expect((await repository.list()).map((card) => card.storeName)).toEqual(['Shop'])
-    } finally {
-      // jsdom has no scrollIntoView of its own.
-      delete (Element.prototype as Partial<Element>).scrollIntoView
-    }
+    })
+
+    it('does not scroll when the whole panel already fits', async () => {
+      setVisualViewport(0, 600)
+      panelBox = { top: 300, bottom: 560 }
+      const { save } = await exportAll()
+      expect(scrollBy).not.toHaveBeenCalled()
+      expect(save).toHaveFocus()
+    })
+
+    it('measures against a scrolled visual viewport (offsetTop)', async () => {
+      // Visible band 100–600 in layout coordinates; panel bottom 590 + 24 is 14px below it.
+      setVisualViewport(100, 500)
+      panelBox = { top: 400, bottom: 590 }
+      await exportAll()
+      expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ top: 14 }))
+    })
+
+    it('keeps the top of a panel taller than the visible area in view', async () => {
+      setVisualViewport(0, 400)
+      panelBox = { top: 300, bottom: 900 }
+      await exportAll()
+      // Only up to the 16px top clearance: 300 − 16.
+      expect(scrollBy).toHaveBeenCalledWith(expect.objectContaining({ top: 284 }))
+    })
+
+    it('scrolls without animation when reduced motion is preferred', async () => {
+      window.matchMedia = vi.fn((query: string) => ({ matches: query.includes('reduce'), media: query })) as unknown as typeof window.matchMedia
+      setVisualViewport(0, 600)
+      panelBox = { top: 500, bottom: 700 }
+      const { save } = await exportAll()
+      expect(scrollBy).toHaveBeenCalledWith({ top: 124, left: 0, behavior: 'auto' })
+      expect(save).toHaveFocus()
+    })
   })
 })
