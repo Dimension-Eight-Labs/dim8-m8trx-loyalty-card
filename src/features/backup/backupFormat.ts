@@ -14,6 +14,7 @@
  *     "order": ["<card id>", ...],       // wallet order; names every card once
  *     "cards": [ {
  *       "id": "...", "schemaVersion": 2, "storeName": "...", "color": "teal",
+ *       "icon": "coffee",                // optional category icon (v0.6.0)
  *       "notes": "...",                  // optional (migrated Iteration 2 notes)
  *       "createdAt": "<ISO 8601>", "updatedAt": "<ISO 8601>",
  *       "barcode":
@@ -24,6 +25,12 @@
  *             "detectedValue": "...", "detectedFormat": "QR code" }  // optional
  *     } ]
  *   }
+ *
+ * Category icons (app 0.6.0) are an optional, additive field, so the format
+ * stays at version 1: files from 0.5.x simply have no `icon` and restore as
+ * None, and export omits the field for None. When present it must be one of
+ * CARD_ICON_IDS (src/features/cards/cardIcons.ts); anything else (including
+ * null or a non-string) rejects the file as damaged, like an unknown colour.
  *
  * Fidelity: card records are copied field for field. Barcode values are
  * never trimmed. Stored artwork (imported images, kept QR artwork) is
@@ -66,6 +73,7 @@ import {
   type CardBarcode,
   type LoyaltyCard,
 } from '../cards/card.ts'
+import { isCardIconId } from '../cards/cardIcons.ts'
 
 export const BACKUP_FORMAT_ID = 'm8trx-backup'
 export const BACKUP_FORMAT_VERSION = 1
@@ -228,6 +236,7 @@ export async function createBackupExport(
       schemaVersion: card.schemaVersion,
       storeName: card.storeName,
       color: card.color,
+      ...(card.icon !== undefined ? { icon: card.icon } : {}),
       ...(card.notes !== undefined ? { notes: card.notes } : {}),
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,
@@ -351,10 +360,12 @@ function parseCard(raw: unknown, budget: { imageBytes: number }, limits: BackupL
   if (raw.schemaVersion !== CARD_SCHEMA_VERSION) {
     throw new BackupError(typeof raw.schemaVersion === 'number' && raw.schemaVersion > CARD_SCHEMA_VERSION ? NEWER_VERSION : DAMAGED)
   }
-  const { id, storeName, color, notes, createdAt, updatedAt } = raw
+  const { id, storeName, color, icon, notes, createdAt, updatedAt } = raw
   if (!isBoundedString(id, limits.idLength) || id === '' || hasControlCharacters(id)) throw new BackupError(DAMAGED)
   if (typeof storeName !== 'string' || validateStoreName(storeName)) throw new BackupError(DAMAGED)
   if (typeof color !== 'string' || validateColor(color)) throw new BackupError(DAMAGED)
+  // Absent means None; a present value must be a supported identifier.
+  if (icon !== undefined && !isCardIconId(icon)) throw new BackupError(DAMAGED)
   if (notes !== undefined && !isBoundedString(notes, limits.notesLength)) throw new BackupError(DAMAGED)
   if (!isTimestamp(createdAt, limits) || !isTimestamp(updatedAt, limits)) throw new BackupError(DAMAGED)
 
@@ -365,6 +376,7 @@ function parseCard(raw: unknown, budget: { imageBytes: number }, limits: BackupL
     schemaVersion: CARD_SCHEMA_VERSION,
     storeName,
     color,
+    ...(icon !== undefined ? { icon } : {}),
     barcode,
     ...(typeof notes === 'string' && notes !== '' ? { notes } : {}),
     createdAt,

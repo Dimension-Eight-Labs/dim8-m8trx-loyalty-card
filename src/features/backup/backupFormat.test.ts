@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { CardBarcode, LoyaltyCard } from '../cards/card.ts'
+import { CARD_ICON_IDS } from '../cards/cardIcons.ts'
 import {
   BACKUP_FORMAT_ID,
   BACKUP_FORMAT_VERSION,
@@ -47,11 +48,11 @@ function card(id: string, storeName: string, barcode: CardBarcode, extra: Partia
 
 const artwork = imageBytes()
 const wallet: LoyaltyCard[] = [
-  card('c', 'Coffee', { kind: 'generated', format: 'code128', value: '  0012 3456 ' }, { color: 'red' }),
+  card('c', 'Coffee', { kind: 'generated', format: 'code128', value: '  0012 3456 ' }, { color: 'red', icon: 'coffee' }),
   card('a', 'Grocer', { kind: 'generated', format: 'ean13', value: '4006381333931' }),
-  card('q', 'Gym', { kind: 'generated', format: 'qrcode', value: 'MEMBER-42' }),
+  card('q', 'Gym', { kind: 'generated', format: 'qrcode', value: 'MEMBER-42' }, { icon: 'fitness' }),
   card('t', 'Library', { kind: 'text', value: '000123 45-AB' }, { notes: 'Stamp card' }),
-  card('i', 'Logo Shop', { kind: 'image', image: new Blob([artwork], { type: 'image/png' }), detectedFormat: 'QR code', detectedValue: ' Gold 7 ' }),
+  card('i', 'Logo Shop', { kind: 'image', image: new Blob([artwork], { type: 'image/png' }), detectedFormat: 'QR code', detectedValue: ' Gold 7 ' }, { icon: 'retail' }),
   card('u', 'Old Pass', { kind: 'image', image: new Blob([imageBytes(JPEG, 50)], { type: 'image/jpeg' }) }),
 ]
 const meta = { appName: 'M8TRX', appVersion: '0.5.0', now: new Date('2026-11-14T18:00:00.000Z') }
@@ -124,6 +125,34 @@ describe('backup round trip', () => {
   })
 })
 
+describe('category icons (v0.6.0)', () => {
+  it('exports a chosen icon and omits the field for None', async () => {
+    const doc = await backupOf()
+    expect(doc.cards.map((c) => c.icon)).toEqual(['coffee', undefined, 'fitness', undefined, 'retail', undefined])
+    expect(doc.cards.filter((c) => 'icon' in c)).toHaveLength(3)
+    expect(doc.version).toBe(1)
+  })
+
+  it('round-trips every supported icon', async () => {
+    const cards = CARD_ICON_IDS.map((icon, i) => card(`icon-${i}`, `Store ${i}`, { kind: 'text', value: `N${i}` }, { icon }))
+    expect(parseBackup(await createBackup(cards, meta)).map((c) => c.icon)).toEqual([...CARD_ICON_IDS])
+  })
+
+  it('restores a card without an icon (e.g. a 0.5.x backup) as None', async () => {
+    const doc = await backupOf()
+    for (const c of doc.cards) delete c.icon
+    const restored = parseBackup(JSON.stringify(doc))
+    expect(restored.every((c) => !('icon' in c))).toBe(true)
+  })
+
+  it('keeps duplicate detection independent of the icon', async () => {
+    const cards = parseBackup(await createBackup(wallet, meta))
+    const existing = [{ ...wallet[0]!, id: 'other', icon: 'events' as const }]
+    const plan = await planRestore(cards, existing)
+    expect(plan.duplicates.map((c) => c.id)).toContain('c')
+  })
+})
+
 describe('backup validation (untrusted input)', () => {
   it('rejects files that are not M8TRX backups', () => {
     expectRejected('not json', /isn’t an M8TRX backup/)
@@ -167,6 +196,10 @@ describe('backup validation (untrusted input)', () => {
       (c) => (c.storeName = '   '),
       (c) => (c.storeName = 'x'.repeat(81)),
       (c) => (c.color = 'chartreuse'),
+      (c) => (c.icon = 'rocket'),
+      (c) => (c.icon = null),
+      (c) => (c.icon = 7),
+      (c) => (c.icon = ''),
       (c) => (c.createdAt = 'yesterday'),
       (c) => delete c.updatedAt,
       (c) => (c.notes = 42),
@@ -272,7 +305,7 @@ describe('restore planning', () => {
   it('matches kept artwork by its detected code, and different artwork bytes by content only', async () => {
     const cards = parseBackup(await createBackup([wallet[4]!, wallet[5]!], meta))
     const existing = [
-      card('x', 'Same QR, other crop', { kind: 'image', image: new Blob([imageBytes(PNG, 10)], { type: 'image/png' }), detectedFormat: 'QR code', detectedValue: ' Gold 7 ' }),
+      card('x', 'Same QR, other crop', { kind: 'image', image: new Blob([imageBytes(PNG, 10)], { type: 'image/png' }), detectedFormat: 'QR code', detectedValue: ' Gold 7 ' }, { icon: 'retail' }),
       card('y', 'Different pass', { kind: 'image', image: new Blob([imageBytes(JPEG, 51)], { type: 'image/jpeg' }) }),
     ]
     const plan = await planRestore(cards, existing)

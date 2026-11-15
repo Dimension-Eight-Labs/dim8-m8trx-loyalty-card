@@ -1,0 +1,120 @@
+/**
+ * Line-art category icons for wallet tiles and the icon picker (v0.6.0).
+ *
+ * Artwork: original drawings made for M8TRX, inline in this file and
+ * distributed under the repository license. No icon font, emoji, image file
+ * or network request is involved, so every icon renders identically on every
+ * platform and works offline.
+ *
+ * Drawing rules, shared by every icon so they read as one set:
+ * - one 24×24 viewBox, artwork kept inside roughly 2–22 on both axes;
+ * - strokes only (no fills), width 2, round caps and joins;
+ * - white strokes on a transparent background.
+ *
+ * Contrast: white strokes read well on the ten dark palette colors but
+ * poorly on the light ones (Yellow, Orange, White). For those, `halo` draws
+ * the same paths first in a wider, dark, semi-opaque stroke, giving a thin
+ * outline under the white line. It is an outline, not a blur or drop shadow,
+ * and is omitted entirely on dark tiles.
+ *
+ * Decorative: the SVG is aria-hidden. The tile is named by the card name and
+ * the picker labels each option with its category name.
+ */
+import type { ReactNode } from 'react'
+import type { CardIconId } from './cardIcons.ts'
+
+const STROKE = 2
+/** Halo width: one extra unit on each side of the white stroke. */
+const HALO_STROKE = STROKE + 2
+const HALO_COLOR = 'rgb(0 0 0 / 0.72)'
+
+/** Path data per category; each value is one or more SVG elements. */
+const ARTWORK: Record<CardIconId, ReactNode> = {
+  // Dumbbell: two plates joined by a bar, with short grips at the ends.
+  fitness: (
+    <>
+      <rect x="5" y="7" width="3" height="10" rx="1" />
+      <rect x="16" y="7" width="3" height="10" rx="1" />
+      <path d="M8 12h8M2.5 12H5M19 12h2.5" />
+    </>
+  ),
+  // Shopping basket: tapered body, two handle struts, three slats.
+  grocery: (
+    <>
+      <path d="M3.5 10h17l-1.6 8.3a2 2 0 0 1-2 1.7H7.1a2 2 0 0 1-2-1.7Z" />
+      <path d="M7.5 10l3-5.5M16.5 10l-3-5.5M9.5 13.5v3M12 13.5v3M14.5 13.5v3" />
+    </>
+  ),
+  // Fuel pump: pump body with a window, base, and hose to the nozzle.
+  fuel: (
+    <>
+      <path d="M5 20V5.5A1.5 1.5 0 0 1 6.5 4h5A1.5 1.5 0 0 1 13 5.5V20M3.5 20h11" />
+      <path d="M7.5 7.5h3v3h-3Z" />
+      <path d="M13 12h1.5a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 0 3 0V9.5L16.5 7" />
+    </>
+  ),
+  // Open-ended wrench: a C-shaped head opening to the upper right on a
+  // diagonal handle.
+  hardware: <path d="M15.5 7V4a4.5 4.5 0 1 0 4.5 4.5h-3M12.3 11.7 5 19" />,
+  // Fork (three tines) and knife side by side.
+  food: (
+    <>
+      <path d="M5 3v4.5a2 2 0 0 0 4 0V3M7 3v18" />
+      <path d="M17 21V3c-2.2 1.2-3.2 3.6-3.2 7v3.5H17" />
+    </>
+  ),
+  // Coffee cup with handle and two wisps of steam.
+  coffee: (
+    <>
+      <path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5Z" />
+      <path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16" />
+      <path d="M8 3.5c-.6 1 .6 2 0 3M12 3.5c-.6 1 .6 2 0 3" />
+    </>
+  ),
+  // Shopping bag with a rounded carry handle.
+  retail: (
+    <>
+      <path d="M5.5 8h13l-.9 12.1a1 1 0 0 1-1 .9H7.4a1 1 0 0 1-1-.9Z" />
+      <path d="M9 10.5V7a3 3 0 0 1 6 0v3.5" />
+    </>
+  ),
+  // Admission ticket: notched sides and a perforation line.
+  events: (
+    <>
+      <path d="M4 7h16a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4V8a1 1 0 0 1 1-1Z" />
+      <path d="M15 7.5v1.5M15 11.25v1.5M15 15v1.5" />
+    </>
+  ),
+}
+
+export interface CardCategoryIconProps {
+  icon: CardIconId
+  /** Draw a dark outline under the white strokes (for light tile colors). */
+  halo?: boolean
+  className?: string
+}
+
+export function CardCategoryIcon({ icon, halo = false, className }: CardCategoryIconProps) {
+  const artwork = ARTWORK[icon]
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      data-icon={icon}
+    >
+      {halo && (
+        <g stroke={HALO_COLOR} strokeWidth={HALO_STROKE} data-part="halo">
+          {artwork}
+        </g>
+      )}
+      <g stroke="#ffffff" strokeWidth={STROKE}>
+        {artwork}
+      </g>
+    </svg>
+  )
+}

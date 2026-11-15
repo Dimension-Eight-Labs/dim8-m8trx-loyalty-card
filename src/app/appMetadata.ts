@@ -6,8 +6,10 @@
  * block in vite.config.ts), so the About screen and backup files always
  * report the version that was actually built.
  *
- * Copy (description, legal notice) is the approved Iteration 4F wording;
- * change it only with product approval.
+ * Copy: the legal notice is the approved Iteration 4F wording; the
+ * description is the approved v0.6.0 general-purpose wording (M8TRX stores
+ * any card or scannable code, not only loyalty cards). Change either only
+ * with product approval.
  */
 export const APP_NAME = 'M8TRX'
 export const APP_ATTRIBUTION = 'by DIM8 Labs'
@@ -36,4 +38,4 @@ export const COPYRIGHT_NOTICE = `© 2026 ${COMPANY_NAME}`
 /** Full legal notice on the About screen. */
 export const LEGAL_NOTICE = `© 2026 ${COMPANY_NAME}. All rights reserved.`
 export const APP_DESCRIPTION =
-  'M8TRX is a simple, offline-first wallet for your loyalty cards. Scan them once. Show them when you need them. No accounts, no tracking, no unnecessary nonsense.'
+  'M8TRX keeps your cards and scannable codes together, right on your device. Everything works offline. No accounts, no tracking, no cloud storage.'

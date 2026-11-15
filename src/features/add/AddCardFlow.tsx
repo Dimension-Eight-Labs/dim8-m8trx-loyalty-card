@@ -98,7 +98,7 @@ export function AddCardFlow({ defaultColor, onSave, onCancel, services = default
 
       {step.name === 'choose' && (
         <>
-          <ViewHeading id="add-flow-heading" focusOnMount={moved}>
+          <ViewHeading id="add-flow-heading" className="visually-hidden" focusOnMount={moved}>
             Add a card
           </ViewHeading>
           <div className="capture-options">

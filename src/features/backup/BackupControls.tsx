@@ -20,6 +20,16 @@
  * The picker has no `accept` filter: iOS greys out files whose extension it
  * doesn't recognise (such as .m8trx), and the content is validated anyway.
  *
+ * Visibility (v0.6.0): the backup controls sit near the bottom of a long
+ * screen, so the inline "Backup ready" section (and an inline error) can
+ * appear below the visible area on a phone, leaving the user unsure whether
+ * anything happened. When either appears it is scrolled into view with
+ * `block: 'nearest'` (the smallest scroll that shows it, none if it is
+ * already visible), smoothly unless the user prefers reduced motion. Its CSS
+ * scroll margins keep it clear of the screen edge and the iOS home-indicator
+ * safe area. Focus then moves to Save backup without a second scroll. The
+ * oversized-export warning is a modal dialog and is always on screen.
+ *
  * Everything happens on the device; nothing is sent anywhere.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -70,11 +80,22 @@ export function BackupControls({
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const saveRef = useRef<HTMLButtonElement>(null)
+  const readyRef = useRef<HTMLDivElement>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
 
-  // Put keyboard/screen-reader users on the next step once the file is ready.
+  // Show the newly revealed "Backup ready" section, then put keyboard and
+  // screen-reader users on its next step. If the section could not be
+  // scrolled (no scrollIntoView), let focus scroll it into view instead.
   useEffect(() => {
-    if (ready) saveRef.current?.focus()
+    if (!ready) return
+    const revealed = revealSection(readyRef.current)
+    saveRef.current?.focus({ preventScroll: revealed })
   }, [ready])
+
+  // An inline error is announced (role="alert") and also brought on screen.
+  useEffect(() => {
+    if (error) revealSection(errorRef.current)
+  }, [error])
 
   const reset = () => {
     setMessage('')
@@ -177,7 +198,7 @@ export function BackupControls({
       </div>
 
       {ready && (
-        <div className="backup-ready">
+        <div ref={readyRef} className="backup-ready" data-testid="backup-ready">
           <p className="backup-ready__text">
             Backup ready: <strong>{ready.file.name}</strong> ({ready.count} {ready.count === 1 ? 'card' : 'cards'})
           </p>
@@ -195,9 +216,27 @@ export function BackupControls({
       <p className="utility-group__message" role="status">
         {message}
       </p>
-      <div role="alert">{error && <p className="notice notice--error">{error}</p>}</div>
+      <div role="alert">
+        {error && (
+          <p ref={errorRef} className="notice notice--error backup-notice">
+            {error}
+          </p>
+        )}
+      </div>
     </section>
   )
+}
+
+/**
+ * Scrolls `element` the minimum distance needed to show it (nothing if it is
+ * already visible). Returns false when it could not try (no element, or a
+ * browser without scrollIntoView), so the caller can fall back.
+ */
+function revealSection(element: HTMLElement | null): boolean {
+  if (!element || typeof element.scrollIntoView !== 'function') return false
+  const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' })
+  return true
 }
 
 function messageOf(error: unknown, fallback: string): string {

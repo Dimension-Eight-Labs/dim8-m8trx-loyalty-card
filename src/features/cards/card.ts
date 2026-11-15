@@ -16,6 +16,7 @@
  *   app never guesses a format for these.
  */
 import { isBarcodeFormat, validateBarcodeValue, type BarcodeFormat } from '../barcodes/formats.ts'
+import { isCardIconId, type CardIconId } from './cardIcons.ts'
 import { isTileColorId } from './tileColors.ts'
 
 /** Current record schema; stored on each card to make future migrations explicit. */
@@ -43,6 +44,11 @@ export interface LoyaltyCard {
   storeName: string
   /** Palette id from tileColors.ts. */
   color: string
+  /**
+   * Optional category icon (cardIcons.ts). Absent means None. Added in app
+   * 0.6.0 without a schema bump: older records simply lack it.
+   */
+  icon?: CardIconId
   barcode: CardBarcode
   /**
    * Notes carried over from Iteration 2 records. No longer shown or editable,
@@ -58,6 +64,8 @@ export interface LoyaltyCard {
 export interface NewCardInput {
   storeName: string
   color: string
+  /** Optional category icon; omit (or undefined) for None. */
+  icon?: CardIconId
   barcode: CardBarcode
 }
 
@@ -65,6 +73,11 @@ export interface NewCardInput {
 export interface CardChanges {
   storeName?: string
   color?: string
+  /**
+   * Leave the property out to keep the current icon; `null` clears it
+   * (None); an identifier sets it. `undefined` is treated as "unchanged".
+   */
+  icon?: CardIconId | null
 }
 
 export const CARD_LIMITS = {
@@ -83,7 +96,12 @@ export function validateStoreName(name: string): string | null {
 }
 
 export function validateColor(color: string): string | null {
-  return isTileColorId(color) ? null : 'Choose a tile colour.'
+  return isTileColorId(color) ? null : 'Choose a tile color.'
+}
+
+/** An absent icon (None) is valid; a present one must be a known identifier. */
+export function validateIcon(icon: unknown): string | null {
+  return icon === undefined || isCardIconId(icon) ? null : 'Choose a category icon.'
 }
 
 /** Validates barcode data exactly as given (no trimming). */
@@ -103,7 +121,12 @@ export function validateBarcode(barcode: CardBarcode): string | null {
 
 /** First validation error in a new card, or null when it can be saved. */
 export function validateNewCard(input: NewCardInput): string | null {
-  return validateStoreName(input.storeName) ?? validateColor(input.color) ?? validateBarcode(input.barcode)
+  return (
+    validateStoreName(input.storeName) ??
+    validateColor(input.color) ??
+    validateIcon(input.icon) ??
+    validateBarcode(input.barcode)
+  )
 }
 
 /**

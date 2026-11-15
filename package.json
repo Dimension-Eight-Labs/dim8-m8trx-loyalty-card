@@ -1,7 +1,7 @@
 {
   "name": "dim8-loyalty-card",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "M8TRX by DIM8 Labs: a minimalist, offline-first PWA wallet for loyalty and membership cards.",
   "license": "GPL-3.0-or-later",
   "type": "module",

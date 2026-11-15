@@ -39,7 +39,7 @@ describe('public release metadata', () => {
   it('is licensed GPL-3.0-or-later with the unmodified official GPLv3 text', () => {
     const pkg = JSON.parse(read('package.json')) as { license?: string; version: string }
     expect(pkg.license).toBe('GPL-3.0-or-later')
-    expect(pkg.version).toBe('0.5.0')
+    expect(pkg.version).toBe('0.6.0')
     const license = read('LICENSE')
     expect(license.startsWith('                    GNU GENERAL PUBLIC LICENSE\n                       Version 3, 29 June 2007\n')).toBe(true)
     // SHA-256 of https://www.gnu.org/licenses/gpl-3.0.txt.

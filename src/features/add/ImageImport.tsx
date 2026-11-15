@@ -185,7 +185,7 @@ export function ImageImport({ file, services, focusOnMount, onCaptured, onChoose
 
   return (
     <div className="import">
-      <ViewHeading id="add-flow-heading" focusOnMount={focusOnMount}>
+      <ViewHeading id="add-flow-heading" className="visually-hidden" focusOnMount={focusOnMount}>
         Import image
       </ViewHeading>
 

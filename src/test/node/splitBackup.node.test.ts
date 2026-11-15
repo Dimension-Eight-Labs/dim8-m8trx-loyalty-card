@@ -18,6 +18,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BACKUP_LIMITS, createBackup, parseBackup, planRestore } from '../../features/backup/backupFormat.ts'
 import { BARCODE_FORMATS, FORMAT_SPECS } from '../../features/barcodes/formats.ts'
 import type { CardBarcode, LoyaltyCard } from '../../features/cards/card.ts'
+import { CARD_ICON_IDS } from '../../features/cards/cardIcons.ts'
 import { TILE_COLORS } from '../../features/cards/tileColors.ts'
 
 const SCRIPT = join(import.meta.dirname, '../../../scripts/split-m8trx-backup.py')
@@ -70,16 +71,17 @@ describe('split-m8trx-backup.py', () => {
     expect(printed).toEqual({ ...BACKUP_LIMITS })
   })
 
-  it('uses exactly the app’s tile colours and barcode formats', () => {
+  it('uses exactly the app’s tile colours, category icons and barcode formats', () => {
     const probe = [
       'import importlib.util, json, sys',
       'spec = importlib.util.spec_from_file_location("splitter", sys.argv[1])',
       'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
-      'print(json.dumps({"colors": sorted(m.TILE_COLOR_IDS), "formats": sorted([*m.GS1_FORMATS, *m.FREE_FORM_FORMATS]),',
+      'print(json.dumps({"colors": sorted(m.TILE_COLOR_IDS), "icons": sorted(m.CARD_ICON_IDS), "formats": sorted([*m.GS1_FORMATS, *m.FREE_FORM_FORMATS]),',
       '  "max": {f: n for f, (_, n) in m.FREE_FORM_FORMATS.items()} | {f: n for f, n in m.GS1_FORMATS.items()}}))',
     ].join('\n')
     const printed = JSON.parse(execFileSync('python3', ['-I', '-c', probe, SCRIPT], { encoding: 'utf-8' }))
     expect(printed.colors).toEqual(TILE_COLORS.map((c) => c.id).sort())
+    expect(printed.icons).toEqual([...CARD_ICON_IDS].sort())
     expect(printed.formats).toEqual([...BARCODE_FORMATS].sort())
     expect(printed.max).toEqual(Object.fromEntries(BARCODE_FORMATS.map((f) => [f, FORMAT_SPECS[f].maxLength])))
   })
@@ -234,6 +236,10 @@ describe('split-m8trx-backup.py', () => {
       ['unknown tile colour', { card: (c) => void (c.color = 'chartreuse') }, /tile color/],
       ['missing tile colour', { card: (c) => void delete c.color }, /tile color/],
       ['non-string tile colour', { card: (c) => void (c.color = 3) }, /tile color/],
+      ['unknown category icon', { card: (c) => void (c.icon = 'rocket') }, /category icon/],
+      ['null category icon', { card: (c) => void (c.icon = null) }, /category icon/],
+      ['non-string category icon', { card: (c) => void (c.icon = 1) }, /category icon/],
+      ['wrong-case category icon', { card: (c) => void (c.icon = 'Coffee') }, /category icon/],
       ['unknown barcode format', { card: generated('made-up', '123') }, /unsupported barcode format/],
       ['missing barcode format', { card: generated(undefined, '123') }, /unsupported barcode format/],
       ['EAN-13 wrong check digit', { card: generated('ean13', '4006381333932') }, /check digit/],
@@ -310,6 +316,10 @@ describe('split-m8trx-backup.py', () => {
         }),
       )
       wallet.push(card('last', 'White tile', { kind: 'text', value: 'W' }, { color: 'white' }))
+      // Every category icon, on cards spread across parts; the rest keep None.
+      CARD_ICON_IDS.forEach((icon, i) => {
+        wallet[i] = { ...wallet[i]!, icon }
+      })
       const text = await createBackup(wallet, meta)
       expect(parseBackup(text)).toHaveLength(wallet.length) // the app accepts the input
 
@@ -326,6 +336,11 @@ describe('split-m8trx-backup.py', () => {
         restored.push(...parseBackup(partText).map((c) => c.id))
       }
       expect(restored).toEqual(original.order)
+      // Icons survive splitting and restore; cards without one stay None.
+      const restoredIcons = new Map<string, string | undefined>()
+      for (const name of parts()) for (const c of parseBackup(readPart(name))) restoredIcons.set(c.id, c.icon)
+      expect(wallet.map((c) => restoredIcons.get(c.id))).toEqual(wallet.map((c) => c.icon))
+      expect(original.cards.filter((c) => !('icon' in c)).length).toBe(wallet.length - CARD_ICON_IDS.length)
     })
 
     it('removes the parts it already wrote if writing a later part fails', async () => {

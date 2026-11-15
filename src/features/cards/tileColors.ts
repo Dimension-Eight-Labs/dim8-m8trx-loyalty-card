@@ -45,6 +45,15 @@ export function tileColor(id: string): TileColor {
   )
 }
 
+/**
+ * True for the light palette entries (dark text: Orange, Yellow, White).
+ * White category icons need a dark outline to stay legible on these; see
+ * CardCategoryIcon.tsx.
+ */
+export function isLightTile(color: TileColor): boolean {
+  return color.text !== '#ffffff'
+}
+
 /** Deterministic colour for migrated cards, so existing cards get varied tiles. */
 export function colorForIndex(index: number): string {
   return (TILE_COLORS[index % TILE_COLORS.length] as TileColor).id

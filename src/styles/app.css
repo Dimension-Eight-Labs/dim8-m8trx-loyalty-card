@@ -456,8 +456,8 @@
 /* ---- Wallet ---------------------------------------------------------------
  * Square tiles in a responsive grid: two columns on phones (each tile about
  * the size of a thumb-friendly physical card), more as width allows.
- * Tile backgrounds come from the card's palette colour (inline style), which
- * also sets `--tile-accent` for the miniature card's bands.
+ * Tile backgrounds and text colours come from the card's palette colour
+ * (inline style).
  * The grid is the tiles' offsetParent (position: relative) so the reorder
  * code can measure each tile's layout slot; see useWalletReorder.ts.
  */
@@ -469,6 +469,8 @@
 }
 
 .tile {
+  --tile-padding: var(--space-3);
+  --tile-icon-size: 2.125rem;
   position: relative;
   aspect-ratio: 1;
   border-radius: var(--radius-lg);
@@ -479,24 +481,27 @@
 }
 
 /*
- * Three-row grid so the miniature card is centred in the tile itself, not
- * just in the space left over by the name: the empty first row and the
- * name's row share the free space equally, which puts the preview on the
- * tile's true centre (padding is equal on all sides for the same reason).
- * When a long two-line name needs more than its half of the free space, the
- * grid treats that row as inflexible and the preview moves up only as far as
- * needed, so the name never overlaps it. The ⋯ button is absolutely
- * positioned over the corner and does not take part in this layout.
+ * Tile layout (v0.6.0). Every tile has identical geometry whatever its
+ * content:
+ * - The optional category icon sits in a fixed square slot in the upper-left
+ *   corner, at the tile padding, so its left edge lines up with the name
+ *   below it and its centre sits close to level with the ⋯ button's.
+ *   The slot is absolutely positioned and always present, so a tile without
+ *   an icon lays out exactly like one with an icon.
+ * - The name occupies one line in a fixed band at the bottom (flex-end). It
+ *   never wraps; overflow ends in an ellipsis, so long names cannot change the
+ *   tile's height or move other content. Regular weight, slightly smaller
+ *   than the old two-line bold name.
+ * The ⋯ button is absolutely positioned and does not take part in layout.
  */
 .tile__open {
-  display: grid;
-  /* minmax(min-content, …): the name clips (overflow: hidden), which would
-   * otherwise give its row a zero automatic minimum and let it overlap. */
-  grid-template-rows: minmax(0, 1fr) auto minmax(min-content, 1fr);
-  justify-items: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   width: 100%;
   height: 100%;
-  padding: var(--space-4);
+  padding: var(--tile-padding);
   border: 0;
   background: linear-gradient(160deg, rgb(255 255 255 / 0.12), transparent 55%);
   color: inherit;
@@ -519,22 +524,31 @@
   outline-color: currentColor;
 }
 
+.tile__icon {
+  position: absolute;
+  top: var(--tile-padding);
+  left: var(--tile-padding);
+  width: var(--tile-icon-size);
+  height: var(--tile-icon-size);
+  pointer-events: none;
+}
+
+.tile__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .tile__name {
-  grid-row: 3;
-  align-self: end;
-  justify-self: stretch;
-  /* Part of the row's minimum size, so it is also the minimum preview gap. */
-  margin-top: var(--space-2);
-  font-size: clamp(1.05rem, 4.6vw, 1.4rem);
-  font-weight: 750;
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
-  /* Long names wrap to at most two lines (the preview sits in the centre). */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: block;
+  width: 100%;
+  font-size: clamp(0.95rem, 4.1vw, 1.15rem);
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: 0;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tile__more {
@@ -613,72 +627,6 @@
   .tile--dragging {
     --lift-scale: 1;
   }
-}
-
-/*
- * Miniature card preview (CardPreview.tsx): a white card with accent bands,
- * like a tiny checkout card. It is centred in the tile (see .tile__open);
- * the width keeps a 1rem margin each side inside the tile padding so the
- * centred card stays clear of the ⋯ button's icon in the top-right corner;
- * the credit-card aspect ratio (85.6 × 54 mm) makes it read as a card. The thin dark outline keeps it distinct on the light
- * "White" palette colour. Motif ink is fixed dark grey on white.
- */
-.card-preview {
-  grid-row: 2;
-  display: flex;
-  flex-direction: column;
-  width: calc(100% - 2rem);
-  max-width: 8.5rem;
-  aspect-ratio: 1.586;
-  border-radius: 0.4rem;
-  background: #ffffff;
-  overflow: hidden;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.14), 0 0.25rem 0.6rem rgb(0 0 0 / 0.25);
-  pointer-events: none;
-}
-
-.card-preview__band {
-  flex: none;
-  height: 16%;
-  /* Slightly darker than the tile itself so the band reads as part of the card. */
-  background: linear-gradient(rgb(0 0 0 / 0.16), rgb(0 0 0 / 0.16)), var(--tile-accent, #5f6368);
-}
-
-.card-preview__band--bottom {
-  height: 7%;
-}
-
-.card-preview__body {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 0;
-  padding: 7% 10%;
-}
-
-.card-preview__motif {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-.card-preview__motif--wide {
-  width: 100%;
-  height: 100%;
-}
-
-.card-preview__motif--square {
-  height: 100%;
-  aspect-ratio: 1;
-}
-
-.card-preview__image {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  -webkit-user-drag: none;
 }
 
 /* ---- Card menu ------------------------------------------------------------ */
@@ -788,6 +736,85 @@
 
 .color-picker__swatch:has(:checked) {
   box-shadow: inset 0 0 0 3px currentColor;
+}
+
+/* ---- Icon picker (IconPicker.tsx) ------------------------------------------
+ * Same structure as the colour picker: a borderless fieldset, a grid of
+ * touch-sized options, an invisible native radio over each option, a focus
+ * outline and a thick inset ring for the selected option. Each option adds a
+ * short visible label under its swatch; swatches preview the icon on the
+ * chosen tile colour.
+ */
+.icon-picker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.icon-picker__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr));
+  gap: var(--space-2);
+}
+
+.icon-picker__option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.icon-picker__input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.icon-picker__swatch {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: var(--touch-target);
+  aspect-ratio: 1;
+  max-width: 3.5rem;
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
+}
+
+.icon-picker__icon {
+  width: 55%;
+  height: 55%;
+}
+
+.icon-picker__label {
+  max-width: 100%;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icon-picker__option:has(:focus-visible) .icon-picker__swatch {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.icon-picker__option:has(:checked) .icon-picker__swatch {
+  box-shadow: inset 0 0 0 3px currentColor;
+}
+
+.icon-picker__option:has(:checked) .icon-picker__label {
+  color: var(--color-text);
+  font-weight: 600;
 }
 
 /* ---- Checkout ------------------------------------------------------------
@@ -1381,6 +1408,17 @@ html.checkout-open body {
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
+}
+
+/*
+ * Scroll margins for BackupControls' scrollIntoView: when the section is
+ * revealed it stops a little clear of the viewport edges, and above the iOS
+ * home indicator (safe-area-inset-bottom) rather than underneath it.
+ */
+.backup-ready,
+.backup-notice {
+  scroll-margin-top: var(--space-4);
+  scroll-margin-bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
 }
 
 .backup-ready__text {

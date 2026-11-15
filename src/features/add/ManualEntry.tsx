@@ -57,7 +57,7 @@ export function ManualEntry({ services, focusOnMount, initial, onCaptured }: Man
 
   return (
     <form className="form manual" onSubmit={submit} noValidate>
-      <ViewHeading id="add-flow-heading" focusOnMount={focusOnMount}>
+      <ViewHeading id="add-flow-heading" className="visually-hidden" focusOnMount={focusOnMount}>
         Enter manually
       </ViewHeading>
 

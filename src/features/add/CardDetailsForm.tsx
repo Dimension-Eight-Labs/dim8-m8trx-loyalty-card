@@ -1,6 +1,10 @@
 /**
  * Final add-card step: verify the captured barcode, then name the card and
- * pick its tile colour.
+ * pick its tile color and optional category icon (default None).
+ *
+ * The screen heading ("Check and name") is visually hidden (v0.6.0): the
+ * persistent header and Back button already orient sighted users, while the
+ * heading still names the view and receives focus for screen readers.
  *
  * The preview is the barcode as it will appear at checkout. For generated
  * codes the format and exact value are shown beneath it so the user can
@@ -13,7 +17,9 @@ import { ViewHeading } from '../../components/ViewHeading.tsx'
 import { BarcodeView } from '../barcodes/BarcodeView.tsx'
 import { FORMAT_SPECS } from '../barcodes/formats.ts'
 import { CARD_LIMITS, validateStoreName, type CardBarcode, type NewCardInput } from '../cards/card.ts'
+import type { CardIconId } from '../cards/cardIcons.ts'
 import { ColorPicker } from '../cards/ColorPicker.tsx'
+import { IconPicker } from '../cards/IconPicker.tsx'
 
 export interface CardDetailsFormProps {
   barcode: CardBarcode
@@ -27,6 +33,7 @@ export interface CardDetailsFormProps {
 export function CardDetailsForm({ barcode, artwork = false, defaultColor, focusOnMount, onSave }: CardDetailsFormProps) {
   const [storeName, setStoreName] = useState('')
   const [color, setColor] = useState(defaultColor)
+  const [icon, setIcon] = useState<CardIconId | null>(null)
   const [nameError, setNameError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -44,7 +51,7 @@ export function CardDetailsForm({ barcode, artwork = false, defaultColor, focusO
     }
     setSaving(true)
     setSaveError(null)
-    const message = await onSave({ storeName, color, barcode })
+    const message = await onSave({ storeName, color, ...(icon ? { icon } : {}), barcode })
     // On success the parent leaves this screen.
     if (message) {
       setSaving(false)
@@ -54,7 +61,7 @@ export function CardDetailsForm({ barcode, artwork = false, defaultColor, focusO
 
   return (
     <form className="form details" onSubmit={submit} noValidate>
-      <ViewHeading id="add-flow-heading" focusOnMount={focusOnMount}>
+      <ViewHeading id="add-flow-heading" className="visually-hidden" focusOnMount={focusOnMount}>
         Check and name
       </ViewHeading>
 
@@ -107,6 +114,7 @@ export function CardDetailsForm({ barcode, artwork = false, defaultColor, focusO
       </div>
 
       <ColorPicker name="new-card-color" value={color} onChange={setColor} />
+      <IconPicker name="new-card-icon" value={icon} color={color} onChange={setIcon} />
 
       <div role="alert">{saveError && <p className="notice notice--error">{saveError}</p>}</div>
 

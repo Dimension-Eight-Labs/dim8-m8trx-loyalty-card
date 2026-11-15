@@ -15,7 +15,10 @@ export interface CardRepository {
   list(): Promise<LoyaltyCard[]>
   /** Validates and stores a new card at the end of the wallet order. The store name is trimmed; barcode data never is. */
   create(input: NewCardInput): Promise<LoyaltyCard>
-  /** Renames and/or recolours a card and bumps `updatedAt`. Never changes its position. */
+  /**
+   * Renames, recolors and/or changes the category icon of a card (`icon:
+   * null` clears it) and bumps `updatedAt`. Never changes its position.
+   */
   update(id: string, changes: CardChanges): Promise<LoyaltyCard>
   /** Removes a card (and its place in the wallet order). Rejects if it does not exist. */
   delete(id: string): Promise<void>

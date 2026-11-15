@@ -138,7 +138,7 @@ export function CameraScanner({ services, focusOnMount, onCaptured, onImport, on
 
   return (
     <div className="scanner">
-      <ViewHeading id="add-flow-heading" focusOnMount={focusOnMount}>
+      <ViewHeading id="add-flow-heading" className="visually-hidden" focusOnMount={focusOnMount}>
         Scan card
       </ViewHeading>
       <div className="scanner__viewport">

@@ -305,7 +305,14 @@ export function App({ repository, capture, saveFile }: AppProps) {
             const result = await updateCard(dialogCard.id, { color })
             if (!result.ok) return result.message
             setDialog(null)
-            setStatusMessage('Colour changed.')
+            setStatusMessage('Color changed.')
+            return null
+          }}
+          onChangeIcon={async (icon) => {
+            const result = await updateCard(dialogCard.id, { icon })
+            if (!result.ok) return result.message
+            setDialog(null)
+            setStatusMessage('Icon changed.')
             return null
           }}
         />

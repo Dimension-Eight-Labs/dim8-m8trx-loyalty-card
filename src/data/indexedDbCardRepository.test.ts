@@ -524,3 +524,87 @@ describe('backup restore: importCards (v0.5.0)', () => {
     await expect(readStoredOrder()).resolves.toEqual(['mine'])
   })
 })
+
+/** Reads one raw card record, bypassing the repository's normalization. */
+function readRawCard(id: string, dbName = DEFAULT_DB_NAME): Promise<Record<string, unknown> | undefined> {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(dbName)
+    request.onsuccess = () => {
+      const db = request.result
+      const get = db.transaction('cards').objectStore('cards').get(id)
+      get.onsuccess = () => {
+        db.close()
+        resolve(get.result as Record<string, unknown> | undefined)
+      }
+      get.onerror = () => reject(get.error)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+describe('category icons (v0.6.0)', () => {
+  it('creates cards with and without an icon; None is stored as an absent field', async () => {
+    const repo = makeRepository()
+    const withIcon = await repo.create({ ...coffee, icon: 'coffee' })
+    const plain = await repo.create({ ...coffee, storeName: 'Plain' })
+    expect(withIcon.icon).toBe('coffee')
+    expect(plain).not.toHaveProperty('icon')
+    expect(await readRawCard(plain.id)).not.toHaveProperty('icon')
+    repo.close()
+
+    // Persisted across a simulated reload.
+    const listed = await makeRepository().list()
+    expect(listed.map((card) => card.icon)).toEqual(['coffee', undefined])
+  })
+
+  it('changes and clears an icon without touching other fields or the order', async () => {
+    const time = clock()
+    const repo = makeRepository({ now: time.now })
+    const first = await repo.create(coffee)
+    const second = await repo.create({ ...coffee, storeName: 'Second' })
+    time.advance()
+
+    const changed = await repo.update(first.id, { icon: 'events' })
+    expect(changed).toEqual({ ...first, icon: 'events', updatedAt: '2026-01-01T00:00:01.000Z' })
+
+    // Leaving `icon` out keeps it.
+    const renamed = await repo.update(first.id, { storeName: 'Renamed' })
+    expect(renamed.icon).toBe('events')
+
+    const cleared = await repo.update(first.id, { icon: null })
+    expect(cleared).not.toHaveProperty('icon')
+    expect(await readRawCard(first.id)).not.toHaveProperty('icon')
+    repo.close()
+
+    const listed = await makeRepository().list()
+    expect(listed.map((card) => card.id)).toEqual([first.id, second.id])
+    expect(listed[0]).toMatchObject({ storeName: 'Renamed', color: 'teal', barcode: coffee.barcode })
+    expect(listed[0]).not.toHaveProperty('icon')
+  })
+
+  it('rejects unsupported icons on create and update, storing nothing', async () => {
+    const repo = makeRepository()
+    await expect(repo.create({ ...coffee, icon: 'rocket' as never })).rejects.toBeInstanceOf(CardValidationError)
+    await expect(repo.list()).resolves.toEqual([])
+    const card = await repo.create(coffee)
+    await expect(repo.update(card.id, { icon: 'Coffee' as never })).rejects.toBeInstanceOf(CardValidationError)
+    await expect(repo.list()).resolves.toEqual([card])
+  })
+
+  it('reads existing cards without an icon field as None, without a migration', async () => {
+    const repo = makeRepository()
+    const card = await repo.create(coffee)
+    repo.close()
+    await rawWrite((tx) => {
+      // A record written by 0.5.x (no icon), and one with a value this version doesn't know.
+      tx.objectStore('cards').put({ ...card, id: 'future-icon', icon: 'spaceship' })
+    })
+    const reopened = makeRepository()
+    const listed = await reopened.list()
+    expect(listed).toHaveLength(2)
+    expect(listed.every((item) => item.icon === undefined)).toBe(true)
+    // An unrelated edit leaves the unrecognized stored value alone.
+    await reopened.update('future-icon', { storeName: 'Edited' })
+    expect((await readRawCard('future-icon'))?.icon).toBe('spaceship')
+  })
+})

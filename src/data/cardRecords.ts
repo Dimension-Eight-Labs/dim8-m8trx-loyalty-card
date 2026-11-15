@@ -7,6 +7,10 @@
  *   createdAt, updatedAt }. The card number was typed text with no symbology.
  * - v2 (app 0.3.0, Iteration 3): LoyaltyCard in src/features/cards/card.ts,
  *   with `schemaVersion: 2`, a tile `color`, and a `barcode` union.
+ * - v2 + optional `icon` (app 0.6.0): a category icon id from
+ *   src/features/cards/cardIcons.ts. Additive, so no schema bump and no
+ *   migration: a missing icon means None. An unrecognized icon value (e.g.
+ *   from a newer app) is read as None but left untouched in storage.
  *
  * Migration policy: never delete or drop a record. A v1 card becomes a v2
  * card whose barcode is `{ kind: 'text', value: cardNumber }` (exact string,
@@ -16,6 +20,7 @@
  */
 import { CARD_SCHEMA_VERSION, type CardBarcode, type LoyaltyCard } from '../features/cards/card.ts'
 import { isBarcodeFormat } from '../features/barcodes/formats.ts'
+import { isCardIconId } from '../features/cards/cardIcons.ts'
 import { colorForIndex } from '../features/cards/tileColors.ts'
 
 type UnknownRecord = Record<string, unknown>
@@ -83,7 +88,7 @@ function readBarcode(value: unknown): CardBarcode | null {
  */
 export function readCardRecord(value: unknown): LoyaltyCard | null {
   if (!isObject(value) || value.schemaVersion !== CARD_SCHEMA_VERSION) return null
-  const { id, storeName, color, createdAt, updatedAt, notes } = value
+  const { id, storeName, color, icon, createdAt, updatedAt, notes } = value
   if (!isString(id) || !isString(storeName) || !isString(color) || !isString(createdAt) || !isString(updatedAt)) {
     return null
   }
@@ -94,6 +99,7 @@ export function readCardRecord(value: unknown): LoyaltyCard | null {
     schemaVersion: CARD_SCHEMA_VERSION,
     storeName,
     color,
+    ...(isCardIconId(icon) ? { icon } : {}),
     barcode,
     ...(isString(notes) && notes !== '' ? { notes } : {}),
     createdAt,

@@ -3,10 +3,13 @@
  *
  * Content is fixed product copy from src/app/appMetadata.ts; the version is
  * the built package version (never typed by hand). Two independent links,
- * the company website and the official source repository (code, licence and
+ * the company website and the official source repository (code, license and
  * documentation), open in a new browsing context; they are the only
  * network-capable elements here and the page itself works offline. Back
  * returns to the Add Card screen.
+ *
+ * The "About" heading is visually hidden (v0.6.0); it still names the view
+ * and takes focus on navigation for screen-reader users.
  */
 import { BrandLockup } from '../../components/AppHeader.tsx'
 import { BackIcon } from '../../components/icons.tsx'
@@ -34,7 +37,7 @@ export function AboutView({ focusOnMount, onBack }: AboutViewProps) {
         <BackIcon />
         Back
       </button>
-      <ViewHeading id="about-heading" focusOnMount={focusOnMount}>
+      <ViewHeading id="about-heading" className="visually-hidden" focusOnMount={focusOnMount}>
         About
       </ViewHeading>
       <div className="about__identity">

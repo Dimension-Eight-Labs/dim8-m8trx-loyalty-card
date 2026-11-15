@@ -13,20 +13,23 @@ The product does one job on purpose. It has **no accounts, advertisements,
 analytics, cloud backend, or synchronization**, and it loads nothing from
 third-party hosts.
 
-## Current status (v0.5.0, development)
+## Current status (v0.6.0, development)
 
-Capture a physical loyalty card once, then show a clean, freshly drawn barcode
-at checkout.
+M8TRX keeps your cards and scannable codes together, right on your device:
+capture a card's barcode or QR code once, then show a clean, freshly drawn
+code at checkout.
 
-- **Wallet home screen**: a grid of square, coloured tiles showing the store
-  name and a miniature card preview (a decorative bar, QR-style or grid motif
-  for the barcode type, or the saved artwork for image cards). The motif never
-  encodes the card's value; no number is shown. Tap a tile to open the card.
-  **Press and hold** a tile (touch) or **drag** it (mouse/pen) to rearrange
-  the wallet; the order is saved on the device. A tile's small **⋯** button
-  opens **Rename**, **Change colour**, **Move earlier / later / to first /
-  to last** (the keyboard-accessible way to reorder), and **Delete** (with
-  confirmation). A small **+** in the top corner adds a card.
+- **Wallet home screen**: a grid of square, colored tiles of identical size.
+  Each shows an optional white line-art **category icon** in the upper-left
+  corner and the card name on **one line** at the bottom (long names end in
+  an ellipsis; the full name is kept, announced to screen readers and shown
+  at checkout). No barcode symbol or card number is shown. Tap a tile to open
+  the card. **Press and hold** a tile (touch) or **drag** it (mouse/pen) to
+  rearrange the wallet; the order is saved on the device. A tile's small
+  **⋯** button opens **Rename**, **Change color**, **Change icon**, **Move
+  up / down / to first / to last** (the keyboard-accessible way to reorder),
+  and **Delete** (with confirmation). A small **+** in the top corner adds a
+  card.
 - **Shared M8TRX header** on every screen: the official DIM8 logo and
   **M8TRX** in the upper-left corner.
 - **Checkout mode**: the shared M8TRX header at the top, then the store name
@@ -51,7 +54,8 @@ at checkout.
     validated (including check digits) and previewed before continuing.
 
   Then check the redrawn barcode (format and exact value are shown), enter the
-  store name, pick a tile colour, and save.
+  store name, pick a tile color and, optionally, a category icon (default
+  **None**), and save.
 - **Backup and restore** (bottom of the Add Card screen): **Export all
   cards** writes one portable `.m8trx` file; **Restore from backup** adds
   the cards from such a file after a confirmation. **About** shows the
@@ -60,6 +64,50 @@ at checkout.
   migrated automatically and are never deleted.
 - Dark interface in the official DIM8 Labs palette, keyboard accessible; no accounts, backend, analytics, or
   third-party requests.
+
+### v0.6.0 — UI polish and card tile redesign
+
+Follow-up to physical-iPhone testing of v0.5.0. Not yet validated on a
+physical iPhone (see the checklist under *Testing*).
+
+- **American English** in the interface: **Color**, **Change color**,
+  **Tile color**, "Color changed." The card menu's move actions are now
+  **Move up** / **Move down** (same behavior and disabled states as the old
+  "Move earlier / later"). Internal identifiers are unchanged.
+- **No redundant screen headings.** The large "Add a card", "Scan card",
+  "Import image", "Enter manually", "Check and name" and "About" titles are
+  visually hidden; the persistent M8TRX header and Back button orient the
+  user. The headings remain in the page for screen readers and still take
+  focus when the screen changes. Dialog titles and the empty-state heading
+  are unchanged.
+- **About** now describes the app generally: "M8TRX keeps your cards and
+  scannable codes together, right on your device. Everything works offline.
+  No accounts, no tracking, no cloud storage."
+- **Export visibility.** When **Export all cards** reveals the inline
+  "Backup ready" section (or an inline error), it is scrolled into view with
+  the smallest movement needed (smooth unless reduced motion is requested),
+  clear of the iOS home indicator, and focus moves to **Save backup**. The
+  oversized-export warning was already a modal dialog.
+- **Tile redesign.** The decorative barcode-type preview is gone. Tiles show
+  only the optional category icon (upper left, fixed slot) and a one-line,
+  regular-weight name in a fixed lower band, so every tile has the same
+  geometry with or without an icon and however long the name.
+- **Optional category icons**: Fitness (dumbbell), Grocery (basket), Fuel
+  (gas pump), Hardware (wrench), Food (fork and knife), Coffee (cup), Retail
+  (shopping bag), Events (ticket), or **None**. Chosen in a picker directly
+  under the tile color picker when adding a card (default None), and changed
+  later with **⋯ → Change icon**. Icons are never inferred from a card's name
+  or barcode. The artwork is original to this project
+  (`src/features/cards/CardCategoryIcon.tsx`, inline SVG, one 24×24 viewBox,
+  2-unit round strokes, white on transparent), bundled under the repository
+  license; no third-party notice is needed and nothing is fetched. On the
+  light tile colors (Orange, Yellow, White) the white strokes get a thin dark
+  outline so they stay legible.
+- **Storage**: an optional `icon` field on card records; absent means None.
+  No IndexedDB version or schema bump and no migration — existing cards keep
+  their names, codes, colors, images, order and IDs and show no icon.
+- **Backups** carry the optional `icon` (format version stays 1; see below);
+  `scripts/split-m8trx-backup.py` validates it and copies it unchanged.
 
 ### v0.5.0 — Final branding, About, and backup/restore (Iteration 4F)
 
@@ -136,6 +184,7 @@ JSON file named `m8trx-backup-YYYY-MM-DD.m8trx`:
   "cards": [
     {
       "id": "…", "schemaVersion": 2, "storeName": "…", "color": "teal",
+      "icon": "coffee",
       "notes": "…", "createdAt": "…", "updatedAt": "…",
       "barcode": { "kind": "generated", "format": "code128", "value": "…" }
     },
@@ -156,6 +205,11 @@ JSON file named `m8trx-backup-YYYY-MM-DD.m8trx`:
   the **exact stored bytes** — never redrawn, resized or recompressed.
   Generated barcodes are stored as format + value, as in the wallet.
 - `order` is the wallet order and must name every card exactly once.
+- `icon` (v0.6.0) is optional: one of `fitness`, `grocery`, `fuel`,
+  `hardware`, `food`, `coffee`, `retail`, `events`. Export omits it for
+  None; a file without it (e.g. from v0.5.x) restores those cards as None.
+  Any other value, including `null`, makes restore reject the file as
+  damaged. Icons play no part in duplicate detection.
 
 **Export** reads the stored wallet, builds the file on the device, then a
 **Save backup** button hands it to the system share sheet (iOS: *Save to
@@ -339,8 +393,9 @@ below).
   reduced motion). Release saves; Escape or a cancelled pointer reverts. A
   drag never opens the card, and long-press no longer opens the management
   menu — the **⋯** button is its only entry point.
-- *Keyboard / screen readers*: **⋯** → **Move earlier**, **Move later**,
-  **Move to first**, **Move to last** ("earlier/later" follow reading order,
+- *Keyboard / screen readers*: **⋯** → **Move up**, **Move down**,
+  **Move to first**, **Move to last** (labelled "Move earlier / later" before
+  v0.6.0; "up/down" follow reading order,
   whatever the column count; unavailable moves are disabled). Focus returns
   to the moved card and its new position is announced.
 - New cards are added at the end; renaming or recolouring never moves a
@@ -505,7 +560,7 @@ store requires GS1-128.
 
 - **Duplicates are allowed.** Two cards may share a store or barcode.
 - **Barcode data isn't editable.** To fix a wrong barcode, delete the card
-  and add it again. Rename and colour can be changed at any time.
+  and add it again. Name, color and category icon can be changed at any time.
 - **Order**: chosen by the user (drag or the ⋯ menu's move actions) and
   saved on the device; new cards go last; renaming or recolouring never
   reorders tiles.
@@ -560,6 +615,12 @@ Database `dim8-loyalty-card`, object store `cards` (keyed by `id`), plus
   - `{ kind: 'image', image: Blob, detectedFormat?, detectedValue? }` — cropped
     picture fallback;
   - `{ kind: 'text', value }` — a number without a known format.
+- **Optional `icon`** (v0.6.0): card records may carry a category icon id
+  (see `src/features/cards/cardIcons.ts`). This is additive: the database
+  stays at version 3 and `schemaVersion` at 2, nothing is migrated, and a
+  missing icon means None. An icon value this version does not recognize is
+  shown as None but left untouched in storage. Choosing None removes the
+  field.
 - **Version 3** (v0.4.0): card records are unchanged; a new `meta` store
   holds `walletOrder`, an array of card IDs in the user's order. Keeping the
   order outside the card records means a reorder rewrites one small array
@@ -644,8 +705,11 @@ src/
                             scan loop), decodeCascade.ts (still-image views),
                             canvasProbe.ts, imageSource.ts and camera.ts
                             (browser pixel acquisition), BarcodeView
-    wallet/                 WalletScreen, CardTile, CardPreview (+ previewMotif),
-                            useLongPress, CardMenu
+    wallet/                 WalletScreen, CardTile, CardMenu, useWalletReorder,
+                            walletOrder.ts
+    cards/                  card.ts (domain model), cardIcons.ts (icon ids),
+                            CardCategoryIcon (icon artwork), IconPicker,
+                            ColorPicker, tileColors.ts, useCards
     checkout/               CheckoutScreen, gesture.ts (swipe rules), useWakeLock
     add/                    AddCardFlow, CameraScanner, ImageImport (crop),
                             ManualEntry, CardDetailsForm, captureServices
@@ -732,8 +796,17 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
 - **PWA identity** (`pwaAssets.node.test.ts`): manifest names/colours, icon
   files at their declared pixel sizes, index.html metadata, version from
   `package.json`, logo derivatives.
-- **Wallet/checkout UI**: tile preview variants (no value encoded, artwork
-  object URLs revoked), palette contrast ≥ 4.5:1, checkout card structure
+- **UI polish and icons (v0.6.0)**: American English labels, Move up/down
+  labels and boundaries, visually hidden (but focused and named) screen
+  headings, About copy, export "Backup ready" scrolled into view with focus
+  on Save backup, tiles with no barcode symbol and one name element holding
+  the full name, the icon picker (position, default None, labels), choosing
+  and changing/removing icons with reload persistence, repository
+  create/update/clear/invalid icons and pre-0.6.0 records without one,
+  backup icon round trips and invalid-icon rejection, and the split
+  utility's icon list and validation. jsdom has no layout, so the one-line
+  ellipsis itself is checked visually, not by these tests.
+- **Wallet/checkout UI**: palette contrast ≥ 4.5:1, checkout card structure
   (name above pagination, barcode inside the card, accent local to the card),
   swipe-down close, and taps/short/diagonal/upward/cancelled gestures not
   closing.
@@ -746,6 +819,26 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
 These do not prove behaviour on a phone. See the checklist below.
 
 ### Real-device checklist (not verifiable in host tests)
+
+**v0.6.0 physical-iPhone acceptance (UI polish and tile redesign).** None
+of these have been performed yet; record results per item.
+
+1. Wallet tiles are all the same size; names sit on one line in the same
+   place, long names end in "…", and the ⋯ button is still easy to tap.
+2. Each of the eight icons is recognizable and crisp on all 12 tile colors
+   (including the outlined icons on Orange, Yellow and White); tiles without
+   an icon look intentional, not broken.
+3. Add a card: the icon picker sits directly under the color picker, is easy
+   to tap, previews on the chosen color, and defaults to None.
+4. ⋯ → Change icon (and back to None) updates the tile; the choice survives
+   closing and reopening the app.
+5. Add Card, the add steps and About no longer show a large title, and there
+   is no awkward gap at the top. VoiceOver still announces the screen name.
+6. Export all cards: the "Backup ready" section scrolls into view (clear of
+   the home indicator) without a jarring jump; Save backup works.
+7. Export, restore on a clean profile: icons, names, colors, order and kept
+   artwork return unchanged; split backups (if used) restore with icons.
+8. Offline relaunch and a real checkout scan still work.
 
 **v0.5.0 physical-iPhone acceptance (Iteration 4F).** None of these have
 been performed yet; record results per item.

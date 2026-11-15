@@ -174,16 +174,21 @@ describe('App', () => {
     expect(screen.getByText('Card saved.')).toBeInTheDocument()
   })
 
-  it('shows a miniature card preview on each tile: bars for linear codes, a QR motif for QR codes', async () => {
+  it('shows tiles without a barcode symbol: just the one-line name and an empty icon slot by default', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Bar Shop', '0012', 'Code 128', 'Red')
     await addManualCard(user, 'QR Shop', 'MEMBER 1', 'QR code', 'White')
 
     const barTile = screen.getByRole('button', { name: 'Bar Shop' })
     const qrTile = screen.getByRole('button', { name: 'QR Shop' })
-    expect(barTile.querySelector('[data-preview="linear"]')).toBeInTheDocument()
-    expect(qrTile.querySelector('[data-preview="qr"]')).toBeInTheDocument()
-    expect(qrTile.closest('li')!.style.getPropertyValue('--tile-accent')).toBe('#eceff1')
+    for (const tile of [barTile, qrTile]) {
+      // No barcode-type motif and no icon (None is the default).
+      expect(tile.querySelector('svg')).not.toBeInTheDocument()
+      expect(tile.querySelector('[data-preview]')).not.toBeInTheDocument()
+      // The icon slot is still present so every tile has the same layout.
+      expect(within(tile).getByTestId('tile-icon-slot')).toBeEmptyDOMElement()
+    }
+    expect(qrTile.closest('li')).toHaveStyle({ background: '#eceff1' })
     // Still no card data on the home screen.
     expect(screen.queryByText('0012')).not.toBeInTheDocument()
     expect(screen.queryByText('MEMBER 1')).not.toBeInTheDocument()
@@ -930,12 +935,18 @@ describe('App', () => {
     await addManualCard(user, 'B', '2')
     await addManualCard(user, 'C', '3')
 
-    // Boundaries: the first card can't move earlier.
+    // Boundaries: the first card can't move up, the last can't move down.
     await user.click(screen.getByRole('button', { name: 'Options for A' }))
     expect(screen.getByRole('group', { name: 'Position 1 of 3' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Move earlier' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move up' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Move to first' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Move later' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Move down' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /Move earlier|Move later/ })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Options for C' }))
+    expect(screen.getByRole('button', { name: 'Move up' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Move down' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move to last' })).toBeDisabled()
     await user.keyboard('{Escape}')
 
     screen.getByRole('button', { name: 'Options for C' }).focus()
@@ -948,13 +959,13 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'C' })).toHaveFocus())
 
     await user.click(screen.getByRole('button', { name: 'Options for C' }))
-    await user.click(screen.getByRole('button', { name: 'Move later' }))
+    await user.click(screen.getByRole('button', { name: 'Move down' }))
     await waitFor(() => expect(tileOrder()).toEqual(['A', 'C', 'B']))
     await user.click(screen.getByRole('button', { name: 'Options for A' }))
     await user.click(screen.getByRole('button', { name: 'Move to last' }))
     await waitFor(() => expect(tileOrder()).toEqual(['C', 'B', 'A']))
     await user.click(screen.getByRole('button', { name: 'Options for B' }))
-    await user.click(screen.getByRole('button', { name: 'Move earlier' }))
+    await user.click(screen.getByRole('button', { name: 'Move up' }))
     await waitFor(() => expect(tileOrder()).toEqual(['B', 'C', 'A']))
     expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(['B', 'C', 'A'])
   })
@@ -975,7 +986,7 @@ describe('App', () => {
     expect((await real.list()).map((card) => card.storeName)).toEqual(['A', 'B'])
   })
 
-  it('renames and recolours a card from the keyboard-accessible options button', async () => {
+  it('renames and recolors a card from the keyboard-accessible options button', async () => {
     const { user } = renderApp()
     await addManualCard(user, 'Shop', '1', 'Code 128', 'Red')
 
@@ -989,10 +1000,13 @@ describe('App', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Options for Better Shop' }))
-    await user.click(screen.getByRole('button', { name: 'Change colour' }))
+    await user.click(screen.getByRole('button', { name: 'Change color' }))
+    expect(screen.getByRole('heading', { name: 'Change color' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Tile color' })).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: 'Purple' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Better Shop' }).closest('li')).toHaveStyle({ background: '#7b1fa2' }))
+    expect(screen.getByText('Color changed.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Options for Better Shop' })).toHaveFocus()
 
     // Survives a restart.
@@ -1090,7 +1104,7 @@ describe('App', () => {
     const { user } = renderApp()
 
     const tile = await screen.findByRole('button', { name: 'Old Card' })
-    expect(tile.querySelector('[data-preview="text"]')).toBeInTheDocument()
+    expect(within(tile).getByTestId('tile-icon-slot')).toBeEmptyDOMElement()
     await user.click(tile)
     expect(screen.getByText('000123')).toBeInTheDocument()
     expect(screen.getByText(/no barcode saved/i)).toBeInTheDocument()
@@ -1142,8 +1156,8 @@ describe('M8TRX branding, About, and backup/restore (v0.5.0)', () => {
    */
   async function seedWallet(repository: CardRepository) {
     const NodeBlob = await stubNodeBlob()
-    const coffee = await repository.create({ storeName: 'Coffee', color: 'red', barcode: { kind: 'generated', format: 'code128', value: '0012 34' } })
-    const gym = await repository.create({ storeName: 'Gym', color: 'blue', barcode: { kind: 'generated', format: 'qrcode', value: 'MEMBER-42' } })
+    const coffee = await repository.create({ storeName: 'Coffee', color: 'red', icon: 'coffee', barcode: { kind: 'generated', format: 'code128', value: '0012 34' } })
+    const gym = await repository.create({ storeName: 'Gym', color: 'blue', icon: 'fitness', barcode: { kind: 'generated', format: 'qrcode', value: 'MEMBER-42' } })
     const art = await repository.create({
       storeName: 'Logo Shop',
       color: 'purple',
@@ -1236,9 +1250,12 @@ describe('M8TRX branding, About, and backup/restore (v0.5.0)', () => {
     expect(source).not.toBe(link)
     expect(source.contains(link) || link.contains(source)).toBe(false)
     expect(within(about).getAllByRole('link')).toHaveLength(2)
-    expect(within(about).getByText(/simple, offline-first wallet for your loyalty cards/)).toHaveTextContent(
-      'M8TRX is a simple, offline-first wallet for your loyalty cards. Scan them once. Show them when you need them. No accounts, no tracking, no unnecessary nonsense.',
+    expect(within(about).getByText(/keeps your cards and scannable codes together/)).toHaveTextContent(
+      'M8TRX keeps your cards and scannable codes together, right on your device. Everything works offline. No accounts, no tracking, no cloud storage.',
     )
+    expect(about).not.toHaveTextContent(/loyalty cards|Scan them once|Show them when you need them/)
+    // The screen heading names the view for assistive technology but is not shown.
+    expect(within(about).getByRole('heading', { level: 1, name: 'About' })).toHaveClass('visually-hidden')
     expect(within(about).getByText('© 2026 Dimension Eight Labs LLC. All rights reserved.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Back' }))
@@ -1259,6 +1276,8 @@ describe('M8TRX branding, About, and backup/restore (v0.5.0)', () => {
     expect(doc.cards.map((card: { storeName: string }) => card.storeName)).toEqual(names)
     expect(doc.cards.map((card: { barcode: { kind: string } }) => card.barcode.kind)).toEqual(['image', 'generated', 'text', 'generated'])
     expect(Array.from(atob(doc.cards[0].barcode.data), (ch) => ch.charCodeAt(0))).toEqual(PNG)
+    // Category icons are exported; None is an absent field.
+    expect(doc.cards.map((card: { icon?: string }) => card.icon)).toEqual([undefined, 'coffee', undefined, 'fitness'])
     expect(await screen.findByText(/backup downloaded/i)).toBeInTheDocument()
     // An ordinary wallet is far within restore limits: no warning at any point.
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
@@ -1433,6 +1452,10 @@ describe('M8TRX branding, About, and backup/restore (v0.5.0)', () => {
     // Survives a restart, with the artwork byte-for-byte.
     expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(names)
     expect(await imageBytes(makeRepository(), 'Logo Shop')).toEqual(PNG)
+    // Category icons survive export → restore → reload; cards without one stay None.
+    expect((await makeRepository().list()).map((card) => card.icon)).toEqual([undefined, 'coffee', undefined, 'fitness'])
+    expect(screen.getByRole('button', { name: 'Coffee' }).querySelector('svg[data-icon="coffee"]')).toBeInTheDocument()
+    expect(within(screen.getByRole('button', { name: 'Library' })).getByTestId('tile-icon-slot')).toBeEmptyDOMElement()
   })
 
   it('restores into a non-empty wallet: keeps existing cards, skips duplicates, appends the rest', async () => {
@@ -1522,5 +1545,179 @@ describe('M8TRX branding, About, and backup/restore (v0.5.0)', () => {
     await user.click(screen.getByRole('button', { name: 'Save backup' }))
     expect(await screen.findByText(/backup shared/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save backup' })).not.toBeInTheDocument()
+  })
+})
+
+describe('UI polish and category icons (v0.6.0)', () => {
+  /** Opens Add Card → Enter manually → Continue, ending on "Check and name". */
+  async function openDetails(user: UserEvent, value = '1') {
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    await user.click(screen.getByRole('button', { name: /enter manually/i }))
+    await user.type(screen.getByLabelText('Barcode value'), value)
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByLabelText('Store name')
+  }
+
+  it('keeps screen headings for assistive technology but hides them visually', async () => {
+    const { user } = renderApp()
+    await user.click(await screen.findByRole('button', { name: /add card/i }))
+    const addHeading = await screen.findByRole('heading', { level: 1, name: 'Add a card' })
+    expect(addHeading).toHaveClass('visually-hidden')
+    expect(addHeading).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: /enter manually/i }))
+    expect(screen.getByRole('heading', { level: 1, name: 'Enter manually' })).toHaveClass('visually-hidden')
+    await user.type(screen.getByLabelText('Barcode value'), '1')
+    await user.click(screen.getByRole('button', { name: 'Continue' }))
+    const details = await screen.findByRole('heading', { level: 1, name: 'Check and name' })
+    expect(details).toHaveClass('visually-hidden')
+    expect(details).toHaveFocus()
+  })
+
+  it('uses American English for colors throughout the add and edit flows', async () => {
+    const { user } = renderApp()
+    await openDetails(user)
+    expect(screen.getByRole('group', { name: 'Tile color' })).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent(/colour/i)
+    await user.type(screen.getByLabelText('Store name'), 'Shop')
+    await user.click(screen.getByRole('button', { name: 'Save card' }))
+    await user.click(await screen.findByRole('button', { name: 'Options for Shop' }))
+    expect(screen.getByRole('button', { name: 'Change color' })).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent(/colour/i)
+    await user.click(screen.getByRole('button', { name: 'Change color' }))
+    expect(document.body).not.toHaveTextContent(/colour/i)
+  })
+
+  it('offers an optional icon picker below the color picker, defaulting to None', async () => {
+    const { user } = renderApp()
+    await openDetails(user)
+    const colors = screen.getByRole('group', { name: 'Tile color' })
+    const icons = screen.getByRole('group', { name: 'Icon' })
+    expect(colors.nextElementSibling).toBe(icons)
+    const radios = within(icons).getAllByRole('radio')
+    expect(radios.map((radio) => radio.getAttribute('value'))).toEqual(['none', 'fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events'])
+    expect(within(icons).getByRole('radio', { name: 'None' })).toBeChecked()
+    for (const label of ['Fitness', 'Grocery', 'Fuel', 'Hardware', 'Food', 'Coffee', 'Retail', 'Events']) {
+      expect(within(icons).getByRole('radio', { name: label })).not.toBeChecked()
+      expect(within(icons).getByText(label)).toBeVisible()
+    }
+
+    // Saving without touching the picker stores no icon.
+    await user.type(screen.getByLabelText('Store name'), 'Plain')
+    await user.click(screen.getByRole('button', { name: 'Save card' }))
+    await screen.findByRole('button', { name: 'Plain' })
+    const [stored] = await makeRepository().list()
+    expect(stored).not.toHaveProperty('icon')
+  })
+
+  it('saves a chosen icon, shows it on the tile, and keeps it after a reload', async () => {
+    const { user, unmount } = renderApp()
+    await openDetails(user, '42')
+    await user.type(screen.getByLabelText('Store name'), 'Morning Brew')
+    await user.click(screen.getByRole('radio', { name: 'Coffee' }))
+    expect(screen.getByRole('radio', { name: 'Coffee' })).toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Save card' }))
+
+    const tile = await screen.findByRole('button', { name: 'Morning Brew' })
+    const icon = within(tile).getByTestId('tile-icon-slot').querySelector('svg')
+    expect(icon).toHaveAttribute('data-icon', 'coffee')
+    expect(icon).toHaveAttribute('aria-hidden', 'true')
+    unmount()
+
+    // Reload: a fresh app on the same database.
+    renderApp()
+    const reloaded = await screen.findByRole('button', { name: 'Morning Brew' })
+    expect(reloaded.querySelector('svg[data-icon="coffee"]')).toBeInTheDocument()
+    expect((await makeRepository().list())[0]).toMatchObject({ icon: 'coffee', storeName: 'Morning Brew' })
+  })
+
+  it('changes and removes an existing card’s icon from the options menu', async () => {
+    const repository = makeRepository()
+    await repository.create({ storeName: 'Gas & Go', color: 'yellow', barcode: { kind: 'generated', format: 'code128', value: 'G1' } })
+    const { user, unmount } = renderApp(repository)
+    const tile = await screen.findByRole('button', { name: 'Gas & Go' })
+    expect(within(tile).getByTestId('tile-icon-slot')).toBeEmptyDOMElement()
+
+    await user.click(screen.getByRole('button', { name: 'Options for Gas & Go' }))
+    const items = within(screen.getByRole('dialog')).getAllByRole('button').map((button) => button.textContent)
+    expect(items.indexOf('Change icon')).toBe(items.indexOf('Change color') + 1)
+    await user.click(screen.getByRole('button', { name: 'Change icon' }))
+    expect(screen.getByRole('heading', { name: 'Change icon' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'None' })).toBeChecked()
+    await user.click(screen.getByRole('radio', { name: 'Fuel' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Icon changed.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const fuel = screen.getByRole('button', { name: 'Gas & Go' }).querySelector('svg[data-icon="fuel"]')
+    expect(fuel).toBeInTheDocument()
+    // Yellow is a light tile: the white strokes get a dark outline.
+    expect(fuel!.querySelector('[data-part="halo"]')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Options for Gas & Go' })).toHaveFocus()
+    expect((await makeRepository().list())[0]).toMatchObject({ icon: 'fuel', color: 'yellow', storeName: 'Gas & Go' })
+
+    // Back to None; the menu shows the current choice.
+    await user.click(screen.getByRole('button', { name: 'Options for Gas & Go' }))
+    await user.click(screen.getByRole('button', { name: 'Change icon' }))
+    expect(screen.getByRole('radio', { name: 'Fuel' })).toBeChecked()
+    await user.click(screen.getByRole('radio', { name: 'None' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(within(screen.getByRole('button', { name: 'Gas & Go' })).getByTestId('tile-icon-slot')).toBeEmptyDOMElement())
+    unmount()
+    expect((await makeRepository().list())[0]).not.toHaveProperty('icon')
+  })
+
+  it('renders long names on one line with the full name kept for assistive technology and checkout', async () => {
+    const longName = 'The Extremely Long Neighborhood Hardware and Garden Supply Emporium'
+    const repository = makeRepository()
+    await repository.create({ storeName: longName, color: 'green', icon: 'hardware', barcode: { kind: 'generated', format: 'code128', value: 'H1' } })
+    await repository.create({ storeName: 'Short', color: 'green', barcode: { kind: 'generated', format: 'code128', value: 'S1' } })
+    const { user } = renderApp(repository)
+
+    const tile = await screen.findByRole('button', { name: longName })
+    const name = tile.querySelector('.tile__name')!
+    expect(name).toHaveTextContent(longName) // never shortened in the DOM
+    expect(name).toHaveAttribute('title', longName)
+    // Both tiles share the same structure: icon slot, then one name element.
+    const short = screen.getByRole('button', { name: 'Short' })
+    for (const button of [tile, short]) {
+      expect(Array.from(button.children, (child) => child.className)).toEqual(['tile__icon', 'tile__name'])
+    }
+
+    await user.click(tile)
+    expect(within(screen.getByTestId('checkout-stage')).getByRole('heading', { level: 1, name: longName })).toBeInTheDocument()
+  })
+
+  it('scrolls the inline “Backup ready” section into view and focuses Save backup', async () => {
+    const repository = makeRepository()
+    await repository.create({ storeName: 'Shop', color: 'teal', barcode: { kind: 'generated', format: 'code128', value: 'S1' } })
+    const scrolled: Array<{ element: Element; options: unknown }> = []
+    const scrollIntoView = vi.fn(function (this: Element, options?: unknown) {
+      scrolled.push({ element: this, options })
+    })
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      const saveFile = vi.fn(async () => 'downloaded' as const)
+      const user = userEvent.setup()
+      render(<App repository={repository} capture={fakeCapture()} saveFile={saveFile} />)
+      await user.click(await screen.findByRole('button', { name: /add card/i }))
+      const before = scrollIntoView.mock.calls.length
+      await user.click(screen.getByRole('button', { name: /export all cards/i }))
+
+      const save = await screen.findByRole('button', { name: 'Save backup' })
+      const ready = screen.getByTestId('backup-ready')
+      const calls = scrolled.slice(before)
+      expect(calls).toHaveLength(1)
+      expect(calls[0]!.element).toBe(ready)
+      expect(calls[0]!.options).toMatchObject({ block: 'nearest' })
+      expect(ready).toContainElement(save)
+      expect(save).toHaveFocus()
+      // Export contents and cards are unaffected.
+      await user.click(save)
+      await waitFor(() => expect(saveFile).toHaveBeenCalledTimes(1))
+      expect((await repository.list()).map((card) => card.storeName)).toEqual(['Shop'])
+    } finally {
+      // jsdom has no scrollIntoView of its own.
+      delete (Element.prototype as Partial<Element>).scrollIntoView
+    }
   })
 })

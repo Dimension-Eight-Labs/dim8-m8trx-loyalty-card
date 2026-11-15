@@ -6,6 +6,11 @@
  * as it appears, which tells keyboard and screen-reader users that the screen
  * changed and puts them at its start. It is left off for the very first
  * screen so initial page load behaves normally.
+ *
+ * Secondary screens (add-card steps, About) pass `className="visually-hidden"`
+ * (v0.6.0): the persistent M8TRX header and Back button already orient
+ * sighted users, so a large visible title was redundant, but the heading
+ * still names the view for screen readers and remains the focus target.
  */
 import { useEffect, useRef, type ReactNode } from 'react'
 

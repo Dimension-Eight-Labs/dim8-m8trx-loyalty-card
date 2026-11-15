@@ -42,6 +42,7 @@ import {
   CARD_SCHEMA_VERSION,
   compareByCreated,
   validateColor,
+  validateIcon,
   validateNewCard,
   validateStoreName,
   type LoyaltyCard,
@@ -219,6 +220,8 @@ export function createIndexedDbCardRepository(
         schemaVersion: CARD_SCHEMA_VERSION,
         storeName: input.storeName.trim(),
         color: input.color,
+        // None is stored as an absent field, never as a placeholder value.
+        ...(input.icon !== undefined ? { icon: input.icon } : {}),
         // Stored exactly as captured: barcode values are never trimmed.
         barcode: input.barcode,
         createdAt: timestamp,
@@ -259,6 +262,7 @@ export function createIndexedDbCardRepository(
       const storeName = changes.storeName?.trim()
       if (storeName !== undefined && validateStoreName(storeName)) throw new CardValidationError()
       if (changes.color !== undefined && validateColor(changes.color)) throw new CardValidationError()
+      if (changes.icon !== undefined && changes.icon !== null && validateIcon(changes.icon)) throw new CardValidationError()
       // Touches only the card record: wallet order is deliberately left alone.
       return transact([CARD_STORE], 'readwrite', 'Couldn’t save your changes.', (tx, abort) => {
         const store = tx.objectStore(CARD_STORE)
@@ -271,12 +275,15 @@ export function createIndexedDbCardRepository(
             return
           }
           // Patch the raw record so fields this version doesn't know survive.
-          const record = {
+          const record: Record<string, unknown> = {
             ...(request.result as object),
             ...(storeName !== undefined ? { storeName } : {}),
             ...(changes.color !== undefined ? { color: changes.color } : {}),
+            ...(changes.icon ? { icon: changes.icon } : {}),
             updatedAt: now().toISOString(),
           }
+          // Choosing None removes the field rather than storing a placeholder.
+          if (changes.icon === null) delete record.icon
           updated = readCardRecord(record)
           store.put(record)
         }

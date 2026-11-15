@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_LIMITS, validateBarcode, validateNewCard, validateStoreName } from './card.ts'
+import { CARD_LIMITS, validateBarcode, validateIcon, validateNewCard, validateStoreName } from './card.ts'
+import { CARD_ICONS, CARD_ICON_IDS, isCardIconId } from './cardIcons.ts'
 import { TILE_COLORS, tileColor } from './tileColors.ts'
 
 describe('card domain', () => {
@@ -18,7 +19,22 @@ describe('card domain', () => {
   it('requires a palette colour', () => {
     expect(
       validateNewCard({ storeName: 'Shop', color: '#ff0000', barcode: { kind: 'text', value: '1' } }),
-    ).toMatch(/colour/)
+    ).toMatch(/Choose a tile color\./)
+  })
+
+  it('treats a missing icon as None and accepts only the eight supported identifiers', () => {
+    expect(CARD_ICON_IDS).toEqual(['fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events'])
+    expect(CARD_ICONS.map((icon) => icon.label)).toEqual(['Fitness', 'Grocery', 'Fuel', 'Hardware', 'Food', 'Coffee', 'Retail', 'Events'])
+    expect(validateIcon(undefined)).toBeNull()
+    for (const id of CARD_ICON_IDS) expect(validateIcon(id)).toBeNull()
+    for (const bad of [null, '', 'none', 'Coffee', 'rocket', 3]) {
+      expect(isCardIconId(bad)).toBe(false)
+      expect(validateIcon(bad)).toMatch(/icon/)
+    }
+    const base = { storeName: 'Shop', color: 'red', barcode: { kind: 'text' as const, value: '1' } }
+    expect(validateNewCard(base)).toBeNull()
+    expect(validateNewCard({ ...base, icon: 'fuel' })).toBeNull()
+    expect(validateNewCard({ ...base, icon: 'rocket' as never })).toMatch(/icon/)
   })
 
   it('validates barcodes per kind', () => {

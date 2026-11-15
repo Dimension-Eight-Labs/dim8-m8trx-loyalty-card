@@ -1,5 +1,5 @@
 /**
- * Tile colour picker: a native radio group rendered as swatches.
+ * Tile color picker: a native radio group rendered as swatches.
  *
  * Native radios give keyboard behaviour (arrow keys move and select) and
  * screen-reader semantics for free; each swatch is labelled with its colour
@@ -17,7 +17,7 @@ export interface ColorPickerProps {
   legend?: string
 }
 
-export function ColorPicker({ value, onChange, name, legend = 'Tile colour' }: ColorPickerProps) {
+export function ColorPicker({ value, onChange, name, legend = 'Tile color' }: ColorPickerProps) {
   return (
     <fieldset className="color-picker">
       <legend className="field__label">{legend}</legend>

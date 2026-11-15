@@ -192,7 +192,7 @@ export const FORMAT_SPECS: Record<BarcodeFormat, BarcodeFormatSpec> = {
   },
   azteccode: {
     label: 'Aztec',
-    hint: 'Any text. Square code with a bullseye centre.',
+    hint: 'Any text. Square code with a bullseye center.',
     dimension: '2d',
     bwipId: 'azteccode',
     zxingName: 'AZTEC',

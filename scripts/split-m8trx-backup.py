@@ -23,7 +23,7 @@ Validation: the input is checked against the same rules as M8TRX's restore
 parser (parseBackup in src/features/backup/backupFormat.ts and the card and
 barcode rules it calls): format and version, `exportedAt` and `app` metadata,
 unique IDs, an `order` naming every card once, store names, tile colours,
-timestamps, generated-barcode formats and values (including EAN/UPC check
+optional category icons, timestamps, generated-barcode formats and values (including EAN/UPC check
 digits), field lengths, strict base64 whose decoded length matches
 `byteLength`, and image signatures. Where the app's rule depends on the
 browser (Date.parse) or the app accepts something it never writes (a backup
@@ -97,6 +97,11 @@ CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 TILE_COLOR_IDS = frozenset(
     ["red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink", "brown", "slate", "white"]
 )
+
+# Optional category icon ids (CARD_ICON_IDS in src/features/cards/cardIcons.ts,
+# app 0.6.0). A card without "icon" means None; a present value must be one of
+# these exact strings (null or any other value is rejected, as by the app).
+CARD_ICON_IDS = frozenset(["fitness", "grocery", "fuel", "hardware", "food", "coffee", "retail", "events"])
 
 # Characters JavaScript's String.prototype.trim() removes (WhiteSpace and
 # LineTerminator in ECMAScript). Python's str.strip() uses a different set
@@ -262,6 +267,10 @@ def validate_card(card, index):
     color = card.get("color")
     if not isinstance(color, str) or color not in TILE_COLOR_IDS:
         raise BackupError(f"{where} has an invalid tile color {color!r}")
+    if "icon" in card:
+        icon = card["icon"]
+        if not isinstance(icon, str) or icon not in CARD_ICON_IDS:
+            raise BackupError(f"{where} has an unsupported category icon {icon!r}")
     if "notes" in card and not _bounded(card["notes"], LIMITS["notesLength"]):
         raise BackupError(f"{where} has notes longer than {LIMITS['notesLength']} characters")
     if not _is_timestamp(card.get("createdAt")) or not _is_timestamp(card.get("updatedAt")):
