@@ -7,7 +7,7 @@
  *
  * Host tests in jsdom: structure, attributes and focus, not pixels.
  */
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -146,6 +146,51 @@ describe('CardMenu actions', () => {
     const { user, dialog } = await openMenu({ card: makeCard(), onDelete })
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
     expect(onDelete).toHaveBeenCalledTimes(1)
+  })
+})
+
+/*
+ * Short-viewport structure (v0.6.1 correction). The CSS caps the menu-step
+ * panel to the viewport and scrolls only `.card-menu__actions`; that only
+ * keeps the Close × reachable if the header sits outside the scroll region.
+ * jsdom does no layout, so this checks the DOM contract; the CSS side is in
+ * cardLayout.node.test.ts and real rendering is a browser / iPhone check.
+ */
+describe('CardMenu short-viewport structure', () => {
+  it('keeps the header and Close outside the action scroll region', async () => {
+    const { dialog } = await openMenu({ card: makeCard() })
+    expect(dialog).toHaveClass('dialog--menu-actions')
+    const header = within(dialog).getByTestId('card-menu-header')
+    const actions = within(dialog).getByTestId('card-menu-actions')
+    expect(actions).toHaveClass('card-menu__actions')
+    // Header and scroll region are siblings, header first, both direct children of the panel.
+    expect(Array.from(dialog.children)).toEqual([header, actions])
+    expect(actions).not.toContainElement(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(header).toContainElement(within(dialog).getByRole('button', { name: 'Close' }))
+  })
+
+  it('puts every action row, in order, and the move-error alert inside the scroll region', async () => {
+    const { dialog } = await openMenu({ card: makeCard() })
+    const actions = within(dialog).getByTestId('card-menu-actions')
+    const rows = Array.from(actions.querySelectorAll('.menu-list__item'), (row) => row.textContent)
+    expect(rows).toEqual(ACTIONS)
+    expect(dialog.querySelectorAll('.menu-list__item')).toHaveLength(ACTIONS.length)
+    expect(within(actions).getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('drops the height cap in the rename, color and icon steps', async () => {
+    for (const action of ['Rename', 'Change color', 'Change icon']) {
+      const { user, dialog } = await openMenu({ card: makeCard() })
+      await user.click(within(dialog).getByRole('button', { name: action }))
+      const step = screen.getByRole('dialog')
+      expect(step).toHaveClass('dialog--menu')
+      expect(step).not.toHaveClass('dialog--menu-actions')
+      expect(within(step).queryByTestId('card-menu-actions')).not.toBeInTheDocument()
+      // Returning to the menu restores the capped layout.
+      await user.click(within(step).getByRole('button', { name: 'Cancel' }))
+      expect(screen.getByRole('dialog')).toHaveClass('dialog--menu-actions')
+      cleanup()
+    }
   })
 })
 

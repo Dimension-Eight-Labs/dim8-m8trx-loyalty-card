@@ -63,6 +63,50 @@ describe('shared card identity styling (v0.6.1)', () => {
   })
 })
 
+/*
+ * v0.6.1 correction: the ~514px menu must fit short (landscape iPhone)
+ * viewports with its header and Close × visible. These are CSS contract
+ * checks only; they do not prove Mobile Safari layout.
+ */
+describe('card menu on short viewports (v0.6.1 correction)', () => {
+  it('pads the backdrop with safe-area-aware top and bottom space', () => {
+    const backdrop = rule('.dialog-backdrop')
+    expect(backdrop).toMatch(/--dialog-space-top:\s*max\(var\(--space-4\),\s*env\(safe-area-inset-top/)
+    expect(backdrop).toMatch(/--dialog-space-bottom:\s*max\(var\(--space-4\),\s*env\(safe-area-inset-bottom/)
+    expect(backdrop).toMatch(/padding:\s*var\(--dialog-space-top\)[\s\S]*var\(--dialog-space-bottom\)/)
+  })
+
+  it('caps the menu panel to the backdrop, then to the dynamic viewport minus that space', () => {
+    const panel = rule('.dialog--menu-actions')
+    // Fallback first, so browsers without dvh keep a cap.
+    const fallback = panel.indexOf('max-height: 100%;')
+    const dynamic = panel.search(/max-height:\s*min\(100%,\s*calc\(100dvh - var\(--dialog-space-top\) - var\(--dialog-space-bottom\)\)\)/)
+    expect(fallback).toBeGreaterThanOrEqual(0)
+    expect(dynamic).toBeGreaterThan(fallback)
+    expect(panel).toMatch(/overflow:\s*hidden/)
+    // The whole panel must not scroll (that would take the header with it).
+    expect(panel).not.toMatch(/overflow-y:\s*auto/)
+  })
+
+  it('keeps the header fixed and scrolls only the action region', () => {
+    expect(rule('.dialog--menu-actions .card-header')).toMatch(/flex:\s*none/)
+    expect(rule('.card-header')).not.toMatch(/overflow/)
+    const actions = rule('.card-menu__actions')
+    expect(actions).toMatch(/min-height:\s*0/)
+    expect(actions).toMatch(/flex:\s*0 1 auto/)
+    expect(actions).toMatch(/overflow-y:\s*auto/)
+    expect(actions).toMatch(/overscroll-behavior:\s*contain/)
+    // The list itself keeps its height (and border); the region scrolls instead.
+    expect(rule('.card-menu__actions .menu-list')).toMatch(/flex:\s*none/)
+  })
+
+  it('keeps list focus rings inset so the scroll region cannot clip them', () => {
+    expect(rule('.menu-list__item:focus-visible')).toMatch(/outline-offset:\s*-3px/)
+    // Standalone rule (the first match is the shared hover/focus background rule).
+    expect(css).toMatch(/\n\.card-header__close:focus-visible\s*\{[^}]*outline-offset:\s*-3px/)
+  })
+})
+
 describe('checkout card bands (v0.6.1)', () => {
   it('has a tall upper band in the card color holding the title, and a 0.75rem lower band', () => {
     expect(rule('.checkout')).toMatch(/--checkout-band-top:\s*3\.5rem/)

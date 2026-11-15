@@ -16,6 +16,11 @@
  * label. Rename keeps initial focus. The rename / color / icon steps keep
  * their own Cancel buttons, which return to the menu.
  *
+ * Short viewports (v0.6.1 correction): the full menu is ~514px tall, more
+ * than a landscape iPhone shows. The menu-step dialog is therefore capped to
+ * the usable viewport in CSS, the header stays fixed, and only the action
+ * rows (`.card-menu__actions`) scroll, so the Close × is always reachable.
+ *
  * Move actions are the keyboard- and screen-reader-accessible alternative to
  * dragging. "Move up" and "Move down" (internally the `earlier` / `later`
  * targets) mean one place back or forward in reading order (left to right,
@@ -99,7 +104,9 @@ export function CardMenu({ card, position, count, onClose, onRename, onRecolor, 
       labelledBy={titleId}
       onEscape={step === 'menu' ? onClose : () => setStep('menu')}
       initialFocusRef={step === 'menu' ? firstActionRef : undefined}
-      className="dialog--menu"
+      // Only the menu step is height-capped with an internal scroll region;
+      // the rename / color / icon steps keep their normal layout.
+      className={step === 'menu' ? 'dialog--menu dialog--menu-actions' : 'dialog--menu'}
     >
       {step === 'menu' && (
         <>
@@ -117,21 +124,28 @@ export function CardMenu({ card, position, count, onClose, onRename, onRecolor, 
               <CloseIcon />
             </button>
           </div>
-          <div className="menu-list">
-            <MenuItem ref={firstActionRef} icon={<PencilIcon />} label="Rename" onClick={() => setStep('rename')} />
-            <MenuItem icon={<DropIcon />} label="Change color" onClick={() => setStep('color')} />
-            <MenuItem icon={<TagIcon />} label="Change icon" onClick={() => setStep('icon')} />
-            {count > 1 && (
-              <div className="menu-list__group" role="group" aria-label={`Position ${position + 1} of ${count}`}>
-                <MenuItem icon={<ArrowUpIcon />} label="Move up" disabled={atStart || moving} onClick={() => move('earlier')} />
-                <MenuItem icon={<ArrowDownIcon />} label="Move down" disabled={atEnd || moving} onClick={() => move('later')} />
-                <MenuItem icon={<ArrowToTopIcon />} label="Move to first" disabled={atStart || moving} onClick={() => move('first')} />
-                <MenuItem icon={<ArrowToBottomIcon />} label="Move to last" disabled={atEnd || moving} onClick={() => move('last')} />
-              </div>
-            )}
-            <MenuItem icon={<TrashIcon />} label="Delete" danger onClick={onDelete} />
+          {/*
+           * Scroll region: on short (e.g. landscape) viewports the dialog is
+           * capped to the visible height and only this part scrolls, so the
+           * header and its Close × above stay on screen. See app.css.
+           */}
+          <div className="card-menu__actions" data-testid="card-menu-actions">
+            <div className="menu-list">
+              <MenuItem ref={firstActionRef} icon={<PencilIcon />} label="Rename" onClick={() => setStep('rename')} />
+              <MenuItem icon={<DropIcon />} label="Change color" onClick={() => setStep('color')} />
+              <MenuItem icon={<TagIcon />} label="Change icon" onClick={() => setStep('icon')} />
+              {count > 1 && (
+                <div className="menu-list__group" role="group" aria-label={`Position ${position + 1} of ${count}`}>
+                  <MenuItem icon={<ArrowUpIcon />} label="Move up" disabled={atStart || moving} onClick={() => move('earlier')} />
+                  <MenuItem icon={<ArrowDownIcon />} label="Move down" disabled={atEnd || moving} onClick={() => move('later')} />
+                  <MenuItem icon={<ArrowToTopIcon />} label="Move to first" disabled={atStart || moving} onClick={() => move('first')} />
+                  <MenuItem icon={<ArrowToBottomIcon />} label="Move to last" disabled={atEnd || moving} onClick={() => move('last')} />
+                </div>
+              )}
+              <MenuItem icon={<TrashIcon />} label="Delete" danger onClick={onDelete} />
+            </div>
+            <div role="alert">{moveError && <p className="notice notice--error">{moveError}</p>}</div>
           </div>
-          <div role="alert">{moveError && <p className="notice notice--error">{moveError}</p>}</div>
         </>
       )}
       {step === 'rename' && <RenameStep titleId={titleId} card={card} onCancel={() => setStep('menu')} onSave={onRename} />}

@@ -406,6 +406,13 @@
 
 /* ---- Dialogs (card menu, delete confirmation) --------------------------- */
 .dialog-backdrop {
+  /*
+   * Vertical breathing room around the panel, safe-area aware (notch /
+   * Dynamic Island in landscape, home indicator). Shared with
+   * .dialog--menu-actions, which subtracts it from the viewport height.
+   */
+  --dialog-space-top: max(var(--space-4), env(safe-area-inset-top, 0px));
+  --dialog-space-bottom: max(var(--space-4), env(safe-area-inset-bottom, 0px));
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -413,9 +420,9 @@
   align-items: flex-end;
   justify-content: center;
   padding:
-    var(--space-4)
+    var(--dialog-space-top)
     max(var(--space-4), env(safe-area-inset-right))
-    max(var(--space-4), env(safe-area-inset-bottom))
+    var(--dialog-space-bottom)
     max(var(--space-4), env(safe-area-inset-left));
   background: var(--color-backdrop);
 }
@@ -706,6 +713,52 @@
 .card-header__close:focus-visible {
   outline-color: currentColor;
   outline-offset: -3px;
+}
+
+/*
+ * Short viewports (v0.6.1 correction). The full menu is ~514px tall; on a
+ * landscape iPhone (~320-375px of usable height) a bottom-anchored panel of
+ * that size pushed the header and Close × off the top of the screen.
+ *
+ * The menu-step panel is capped to the backdrop's content box (100%, i.e. the
+ * viewport minus the safe-area-aware backdrop padding). Where dynamic
+ * viewport units exist, it is also capped to 100dvh minus that padding, which
+ * tracks Mobile Safari's collapsing toolbars; browsers without dvh drop that
+ * declaration and keep the 100% cap. The header never shrinks; the actions
+ * region takes whatever height is left and scrolls internally. When the menu
+ * fits (normal portrait phones) the cap is not reached: the panel keeps its
+ * natural height and shows no scrollbar.
+ *
+ * overflow: hidden on the panel only clips content at its padding edge, which
+ * nothing reaches (the header and list sit inside the 1.5rem padding); the
+ * panel's own border and shadow are unaffected. Focus rings in the list are
+ * inset (outline-offset: -3px) so the scroll region does not clip them.
+ */
+.dialog--menu-actions {
+  max-height: 100%;
+  max-height: min(100%, calc(100dvh - var(--dialog-space-top) - var(--dialog-space-bottom)));
+  overflow: hidden;
+}
+
+.dialog--menu-actions .card-header {
+  flex: none;
+}
+
+/* Same gap as the panel's, so the list and alert keep their portrait spacing. */
+.card-menu__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* The bordered list must not shrink; the region scrolls instead. */
+.card-menu__actions .menu-list {
+  flex: none;
 }
 
 .menu-list {
