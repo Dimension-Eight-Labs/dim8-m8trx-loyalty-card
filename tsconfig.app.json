@@ -26,5 +26,5 @@
   },
   "include": ["src"],
   /* Host-only tests that read fixture files use Node APIs; tsconfig.test-node.json checks them. */
-  "exclude": ["src/test/node", "src/**/*.node.test.ts"]
+  "exclude": ["src/test/node", "src/**/*.node.test.ts", "src/**/*.node.test.tsx"]
 }

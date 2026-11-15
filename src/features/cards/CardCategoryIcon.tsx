@@ -52,9 +52,21 @@ const ARTWORK: Record<CardIconId, ReactNode> = {
       <path d="M13 12h1.5a1.5 1.5 0 0 1 1.5 1.5V17a1.5 1.5 0 0 0 3 0V9.5L16.5 7" />
     </>
   ),
-  // Open-ended wrench: a C-shaped head opening to the upper right on a
-  // diagonal handle.
-  hardware: <path d="M15.5 7V4a4.5 4.5 0 1 0 4.5 4.5h-3M12.3 11.7 5 19" />,
+  // Hex nut and bolt (v0.6.1; replaced a wrench, which read as car repair
+  // rather than a hardware store): a bolt in side view on the left (head,
+  // shank with a rounded tip, three thread marks) and a nut seen face-on on
+  // the right (regular hexagon, radius 5.5, around its threaded hole). Side by
+  // side rather than assembled, because a nut drawn on the shank read as a
+  // stack of bars at tile size.
+  hardware: (
+    <>
+      <path d="M4.5 3h5a1 1 0 0 1 1 1v3h-7V4a1 1 0 0 1 1-1Z" />
+      <path d="M5.5 7v12.5a1.5 1.5 0 0 0 3 0V7" />
+      <path d="M5.5 11l3-1.5M5.5 14.5l3-1.5M5.5 18l3-1.5" />
+      <path d="M16.5 8.5l4.76 2.75v5.5L16.5 19.5l-4.76-2.75v-5.5Z" />
+      <circle cx="16.5" cy="14" r="2" />
+    </>
+  ),
   // Fork (three tines) and knife side by side.
   food: (
     <>

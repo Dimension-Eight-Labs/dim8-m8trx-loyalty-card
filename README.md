@@ -91,6 +91,24 @@ backup-format change.
   colored band; the lower band is twice as tall. Faces are slightly taller to
   give the code area back that height, so QR codes keep their size. Barcode
   rendering is unchanged.
+- **Consistency and contrast pass** (after iPhone testing of the above):
+  - **Card names match their icons.** The card name and category icon share
+    one palette foreground on every card surface (tile, card-menu header,
+    checkout band, icon preview). The global heading color no longer
+    overrides the name in the card-menu header and checkout band, so names
+    on Yellow, White and Orange are charcoal like their icons.
+  - **Card menu** action labels use the Add Card screen's typography (app
+    font, normal size, standard weight). The actions are now **Rename**,
+    **Change color**, **Change icon**, **Move to first**, **Move to last**,
+    **Delete**: **Move up** / **Move down** were removed because drag-and-drop
+    covers fine positioning. First/last are always shown and disabled where
+    they cannot apply (including for a single card).
+  - **Hardware icon** is now a hex nut and bolt (the wrench suggested car
+    repair). The stored `hardware` identifier is unchanged.
+  - **Picker selection.** The icon picker marks the selected option
+    (including **None**) with the same check mark as the color picker, in a
+    small corner badge; both pickers dropped their thick selected ring, so
+    selected options keep exactly the same size.
 
 ### v0.6.0 — UI polish and card tile redesign
 
@@ -420,11 +438,11 @@ below).
   reduced motion). Release saves; Escape or a cancelled pointer reverts. A
   drag never opens the card, and long-press no longer opens the management
   menu — the **⋯** button is its only entry point.
-- *Keyboard / screen readers*: **⋯** → **Move up**, **Move down**,
-  **Move to first**, **Move to last** (labelled "Move earlier / later" before
-  v0.6.0; "up/down" follow reading order,
-  whatever the column count; unavailable moves are disabled). Focus returns
-  to the moved card and its new position is announced.
+- *Keyboard / screen readers*: **⋯** → **Move to first** or **Move to
+  last** (unavailable moves are disabled, never hidden). One-step **Move up**
+  / **Move down** (v0.6.0–v0.6.1) were removed in the v0.6.1 consistency
+  pass; drag-and-drop covers fine positioning. Focus returns to the moved
+  card and its new position is announced.
 - New cards are added at the end; renaming or recolouring never moves a
   card. The saved order is also checkout's left/right order.
 - The order is stored in IndexedDB (see *Data model*). If saving fails the
@@ -833,6 +851,18 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
   backup icon round trips and invalid-icon rejection, and the split
   utility's icon list and validation. jsdom has no layout, so the one-line
   ellipsis itself is checked visually, not by these tests.
+- **Card foreground and selection (v0.6.1 consistency pass)**
+  (`cardForeground.node.test.tsx`, `tileColors.test.ts`,
+  `cardLayout.node.test.ts`, `CardMenu.test.tsx`): the exact 12-color
+  foreground mapping; for every color, the real base.css/app.css cascade run
+  in jsdom shows the name and icon computing to the same palette foreground
+  on the tile, card-menu header, checkout band and icon preview (the global
+  heading color cannot override them); the nut-and-bolt Hardware artwork;
+  icon-picker check marks (None included) with radio semantics and arrow
+  keys; selected-state CSS that changes no size, ring or border; menu
+  typography tokens; the six-action menu without Move up/down; and the
+  locked tile geometry declarations. Host tests only: pixels, Mobile Safari
+  font rendering and small-icon legibility are checked on the device.
 - **Wallet/checkout UI**: palette contrast ≥ 4.5:1, checkout card structure
   (name above pagination, barcode inside the card, accent local to the card),
   swipe-down close, and taps/short/diagonal/upward/cancelled gestures not
@@ -865,6 +895,16 @@ these have been performed yet; record results per item.
 6. Checkout: name and icon sit in the upper band without crowding long
    names; the lower band looks balanced; real scanners read linear, QR and
    PDF417 codes as before.
+7. Consistency pass: on all 12 colors the card name and icon are the same
+   color on the tile, the ⋯ menu header and checkout — in particular the
+   names on White, Yellow and Orange are charcoal and clearly readable.
+8. The ⋯ menu's labels look like the Add Card screen's (font, size, weight);
+   the menu lists Rename, Change color, Change icon, Move to first, Move to
+   last, Delete; first/last are disabled at the ends and work elsewhere;
+   drag-and-drop still rearranges tiles.
+9. The Hardware icon reads as a nut and bolt at tile and picker size.
+10. Icon and color pickers both show a clear check mark on the selected
+    option (including None) on every color, with no size change or jump.
 
 **v0.6.0 physical-iPhone acceptance (UI polish and tile redesign).** None
 of these have been performed yet; record results per item.

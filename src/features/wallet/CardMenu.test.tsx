@@ -62,7 +62,8 @@ async function openMenu(props: Parameters<typeof Harness>[0]) {
   return { user, trigger, dialog: screen.getByRole('dialog') }
 }
 
-const ACTIONS = ['Rename', 'Change color', 'Change icon', 'Move up', 'Move down', 'Move to first', 'Move to last', 'Delete']
+// Exact v0.6.1 order. One-step Move up / Move down were removed (drag-and-drop covers them).
+const ACTIONS = ['Rename', 'Change color', 'Change icon', 'Move to first', 'Move to last', 'Delete']
 
 describe('CardMenu header', () => {
   it('shows the card’s color, icon and full name, labelling the dialog', async () => {
@@ -118,27 +119,65 @@ describe('CardMenu actions', () => {
     expect(within(dialog).getByRole('button', { name: 'Delete' })).toHaveClass('menu-list__item--danger')
   })
 
+  it('offers no one-step Move up / Move down actions', async () => {
+    const { dialog } = await openMenu({ card: makeCard() })
+    expect(within(dialog).queryByRole('button', { name: /Move up|Move down/ })).not.toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent(/Move up|Move down/)
+  })
+
   it('disables moves that cannot apply at the start and end of the wallet', async () => {
     const first = await openMenu({ card: makeCard(), position: 0, count: 3 })
     const group = within(first.dialog).getByRole('group', { name: 'Position 1 of 3' })
-    expect(within(group).getByRole('button', { name: 'Move up' })).toBeDisabled()
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Move to first', 'Move to last'])
     expect(within(group).getByRole('button', { name: 'Move to first' })).toBeDisabled()
-    expect(within(group).getByRole('button', { name: 'Move down' })).toBeEnabled()
     expect(within(group).getByRole('button', { name: 'Move to last' })).toBeEnabled()
   })
 
-  it('disables the later moves on the last card', async () => {
+  it('enables both moves in the middle of the wallet', async () => {
+    const { dialog } = await openMenu({ card: makeCard(), position: 1, count: 3 })
+    expect(within(dialog).getByRole('button', { name: 'Move to first' })).toBeEnabled()
+    expect(within(dialog).getByRole('button', { name: 'Move to last' })).toBeEnabled()
+  })
+
+  it('disables Move to last on the last card', async () => {
     const { dialog } = await openMenu({ card: makeCard(), position: 2, count: 3 })
-    expect(within(dialog).getByRole('button', { name: 'Move down' })).toBeDisabled()
     expect(within(dialog).getByRole('button', { name: 'Move to last' })).toBeDisabled()
-    expect(within(dialog).getByRole('button', { name: 'Move up' })).toBeEnabled()
     expect(within(dialog).getByRole('button', { name: 'Move to first' })).toBeEnabled()
   })
 
-  it('hides the move group for a single card', async () => {
+  it('keeps both moves visible but disabled for a single card', async () => {
     const single = await openMenu({ card: makeCard(), position: 0, count: 1 })
-    expect(within(single.dialog).queryByRole('group')).not.toBeInTheDocument()
-    expect(Array.from(single.dialog.querySelectorAll('.menu-list__item'), (row) => row.textContent)).toEqual(['Rename', 'Change color', 'Change icon', 'Delete'])
+    expect(within(single.dialog).getByRole('group', { name: 'Position 1 of 1' })).toBeInTheDocument()
+    expect(Array.from(single.dialog.querySelectorAll('.menu-list__item'), (row) => row.textContent)).toEqual(ACTIONS)
+    expect(within(single.dialog).getByRole('button', { name: 'Move to first' })).toBeDisabled()
+    expect(within(single.dialog).getByRole('button', { name: 'Move to last' })).toBeDisabled()
+  })
+
+  it.each([
+    ['Move to first', 'first'],
+    ['Move to last', 'last'],
+  ])('%s calls onMove with the %s target; a failure keeps the menu open with the message', async (label, target) => {
+    const onMove = vi.fn(async () => 'Couldn’t save the new card order.')
+    const user = userEvent.setup()
+    render(
+      <CardMenu
+        card={makeCard()}
+        position={1}
+        count={3}
+        onClose={() => {}}
+        onRename={async () => null}
+        onRecolor={async () => null}
+        onChangeIcon={async () => null}
+        onMove={onMove}
+        onDelete={() => {}}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: label }))
+    expect(onMove).toHaveBeenCalledWith(target)
+    expect(await screen.findByText('Couldn’t save the new card order.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    // Re-enabled after the failure so the user can retry.
+    expect(screen.getByRole('button', { name: label })).toBeEnabled()
   })
 
   it('hands Delete to the parent (which shows the confirmation)', async () => {

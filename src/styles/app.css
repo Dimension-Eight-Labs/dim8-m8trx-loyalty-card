@@ -643,9 +643,15 @@
 /* ---- Card menu ------------------------------------------------------------
  * v0.6.1: an identity header in the card's palette color (inline background
  * and text color) with its icon, name and a top-right Close ×, then the
- * action rows. Rows follow the Add Card capture options: a raised surface,
- * an accent line icon before a 650-weight label, and 48px touch targets,
- * joined into one bordered list to keep the sheet short on small phones.
+ * action rows: a surface row with an accent line icon before its label, and
+ * 48px touch targets, joined into one bordered list to keep the sheet short
+ * on small phones.
+ *
+ * Typography (v0.6.1 consistency pass): action labels use the Add Card
+ * screen's normal action typography — the application font (--font-sans) at
+ * the body size (--font-size-md) and the standard button weight (600) — so the
+ * menu reads as part of the same app. The earlier 650 weight looked heavier
+ * than the Add Card controls on iPhone.
  */
 .card-header {
   display: flex;
@@ -675,10 +681,18 @@
  * The full name, in the tile's typography. Long names wrap (anywhere, so one
  * long word cannot overflow) to at most two lines, then are clamped; the
  * heading's text, and so the dialog's accessible name, stays complete.
+ *
+ * `color: inherit` is required, not decorative: base.css gives every h1/h2 the
+ * app's light heading color, and a color declared on the element itself beats
+ * the palette color inherited from `.card-header`. Without it the name stayed
+ * near-white on the light palette colors (Orange, Yellow, White) while the
+ * icon beside it, which uses currentColor, was charcoal. Inheriting keeps the
+ * name and icon on the single palette foreground set on the container.
  */
 .card-header__title {
   flex: 1;
   min-width: 0;
+  color: inherit;
   font-family: var(--card-name-font);
   font-size: 1.125rem;
   font-weight: 400;
@@ -780,7 +794,10 @@
   background: var(--color-surface);
   color: var(--color-text);
   text-align: left;
-  font-weight: 650;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  line-height: 1.5;
   cursor: pointer;
 }
 
@@ -870,16 +887,23 @@
   outline-offset: 2px;
 }
 
-.color-picker__swatch:has(:checked) {
-  box-shadow: inset 0 0 0 3px currentColor;
+/*
+ * Selection (v0.6.1 consistency pass): the check mark rendered by
+ * ColorPicker is the selected cue, shared with the icon picker. No ring or
+ * border change is applied, so a selected swatch is pixel-identical in size
+ * and edge to an unselected one; the check takes the palette foreground
+ * (currentColor), which meets 4.5:1 on every swatch.
+ */
+.color-picker__swatch .button__icon {
+  pointer-events: none;
 }
 
 /* ---- Icon picker (IconPicker.tsx) ------------------------------------------
  * Same structure as the colour picker: a borderless fieldset, a grid of
  * touch-sized options, an invisible native radio over each option, a focus
- * outline and a thick inset ring for the selected option. Each option adds a
- * short visible label under its swatch; swatches preview the icon on the
- * chosen tile colour.
+ * outline, and the same check-mark selection cue (v0.6.1 consistency pass;
+ * it replaced a thick inset ring). Each option adds a short visible label
+ * under its swatch; swatches preview the icon on the chosen tile colour.
  */
 .icon-picker {
   margin: 0;
@@ -915,6 +939,7 @@
 }
 
 .icon-picker__swatch {
+  position: relative;
   display: grid;
   place-items: center;
   width: 100%;
@@ -944,8 +969,42 @@
   outline-offset: 2px;
 }
 
-.icon-picker__option:has(:checked) .icon-picker__swatch {
-  box-shadow: inset 0 0 0 3px currentColor;
+/*
+ * Selected check mark. It is a small badge in the swatch's lower-right corner
+ * rather than a centred glyph, because the centre already holds the category
+ * artwork. The badge is absolutely positioned, so it never resizes the swatch
+ * or moves the artwork. Legibility on all 12 swatch colours: the badge is a
+ * disc in the palette foreground (inherited currentColor) with the check in the
+ * swatch's own background colour (--swatch-bg, set inline by IconPicker), i.e.
+ * the same >= 4.5:1 palette pair inverted. The 2px ring in the swatch
+ * background separates the disc from category artwork it may overlap. For
+ * None the swatch is empty, so the badge alone marks the selection.
+ */
+.icon-picker__check {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: var(--radius-pill);
+  /* currentColor here is the inherited palette foreground: this element must
+   * not set its own `color`, or the disc would take the swatch colour. */
+  background: currentColor;
+  box-shadow: 0 0 0 2px var(--swatch-bg);
+  pointer-events: none;
+}
+
+.icon-picker__check .button__icon {
+  width: 0.8125rem;
+  height: 0.8125rem;
+  color: var(--swatch-bg);
+}
+
+/* Heavier stroke so the check stays legible at badge size (overrides the path's 2.25 attribute). */
+.icon-picker__check .button__icon path {
+  stroke-width: 3.25;
 }
 
 .icon-picker__option:has(:checked) .icon-picker__label {
@@ -1185,7 +1244,8 @@ html.checkout-open body {
   height: var(--checkout-band-top);
   padding: var(--space-1) var(--space-4);
   background-image: linear-gradient(160deg, rgb(255 255 255 / 0.12), transparent 70%);
-  color: var(--card-on-accent, #ffffff);
+  /* Palette foreground from tileColors.ts, set inline by CheckoutScreen. */
+  color: var(--card-on-accent);
 }
 
 .checkout__icon {
@@ -1206,10 +1266,15 @@ html.checkout-open body {
  * at most two lines and are then clamped inside the fixed-height band, so
  * they never push into the code area; the element's text, and so the
  * dialog's accessible name, is always the complete name.
+ *
+ * `color: inherit` overrides the global h1 heading color from base.css so the
+ * name takes the band's palette foreground, exactly like the icon beside it
+ * (see .card-header__title for the full reasoning).
  */
 .checkout__store {
   flex: 1;
   min-width: 0;
+  color: inherit;
   font-family: var(--card-name-font);
   font-size: clamp(1.0625rem, 4.6vw, 1.2rem);
   font-weight: 400;

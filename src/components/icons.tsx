@@ -37,10 +37,6 @@ export const PencilIcon = () => <Icon path="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5
 export const DropIcon = () => <Icon path="M12 3.5c3.2 3.6 6 7 6 10.5a6 6 0 0 1-12 0c0-3.5 2.8-6.9 6-10.5z" />
 /** Change icon: a label tag (the icon marks the card's category). */
 export const TagIcon = () => <Icon path="M3.5 4.5v7.1l8.9 8.9 8.1-8.1-8.9-8.9H4.5a1 1 0 0 0-1 1zM8 8.5h.01" />
-/** Move up: arrow pointing up. */
-export const ArrowUpIcon = () => <Icon path="M12 19V5M6 11l6-6 6 6" />
-/** Move down: arrow pointing down. */
-export const ArrowDownIcon = () => <Icon path="M12 5v14M6 13l6 6 6-6" />
 /** Move to first: arrow up to a bar. */
 export const ArrowToTopIcon = () => <Icon path="M5 4h14M12 20V9M6.5 14.5L12 9l5.5 5.5" />
 /** Move to last: arrow down to a bar. */

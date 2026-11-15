@@ -10,6 +10,17 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(join(import.meta.dirname, 'app.css'), 'utf-8')
+const baseCss = readFileSync(join(import.meta.dirname, 'base.css'), 'utf-8')
+
+/** Declarations of `selector`'s rule with comments removed and whitespace collapsed. */
+function normalized(selector: string): string {
+  return rule(selector)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split(';')
+    .map((declaration) => declaration.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('; ')
+}
 
 /** The declarations of the first rule whose selector is exactly `selector`. */
 function rule(selector: string): string {
@@ -18,6 +29,139 @@ function rule(selector: string): string {
   expect(match, `rule for ${selector}`).not.toBeNull()
   return match![1]!
 }
+
+/*
+ * Approved and locked (v0.6.1): the home-screen tile geometry. The exact
+ * declarations are pinned so the consistency pass (and later work) cannot
+ * change size, aspect ratio, padding, grid spacing, icon/title position or
+ * touch targets by accident. Changing any of these needs owner approval.
+ */
+describe('locked wallet tile geometry (v0.6.1)', () => {
+  it.each([
+    ['.wallet-grid', 'position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(9.5rem, 42vw), 1fr)); gap: var(--space-3)'],
+    [
+      '.tile',
+      '--tile-padding: var(--space-3); --tile-icon-size: 2.125rem; position: relative; aspect-ratio: 3 / 2; border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14), 0 0.5rem 1.25rem rgb(0 0 0 / 0.35); overflow: hidden',
+    ],
+    ['.tile__icon', 'position: absolute; top: var(--tile-padding); left: var(--tile-padding); width: var(--tile-icon-size); height: var(--tile-icon-size); pointer-events: none'],
+    [
+      '.tile__name',
+      'display: block; width: 100%; font-family: var(--card-name-font); font-size: clamp(0.95rem, 4.1vw, 1.15rem); font-weight: 400; line-height: 1.3; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis',
+    ],
+  ])('%s is unchanged', (selector, expected) => {
+    expect(normalized(selector)).toBe(expected)
+  })
+
+  it('keeps the tile button filling the tile with the shared padding', () => {
+    const open = rule('.tile__open')
+    expect(open).toMatch(/width:\s*100%;/)
+    expect(open).toMatch(/height:\s*100%;/)
+    expect(open).toMatch(/padding:\s*var\(--tile-padding\);/)
+    expect(open).toMatch(/justify-content:\s*flex-end;/)
+    expect(open).toMatch(/color:\s*inherit;/)
+  })
+
+  it('keeps the wide-screen grid spacing', () => {
+    expect(css).toMatch(/\.wallet-grid\s*\{\s*grid-template-columns:\s*repeat\(auto-fill, minmax\(11rem, 1fr\)\);\s*gap:\s*var\(--space-4\);\s*\}/)
+  })
+})
+
+/*
+ * Card foreground cascade (v0.6.1 consistency pass). base.css colors every
+ * h1/h2 with the app's light heading color; a color declared on the element
+ * beats a color inherited from the card container, so each card heading must
+ * explicitly inherit. cardForeground.node.test.tsx runs the real cascade in
+ * jsdom for all 12 colors; these are the stylesheet contracts behind it.
+ */
+describe('card foreground inheritance (v0.6.1 consistency pass)', () => {
+  it('still has the global heading color that card headings must opt out of', () => {
+    expect(baseCss).toMatch(/h1,\s*h2\s*\{\s*color:\s*var\(--color-text\);?\s*\}/)
+  })
+
+  it.each(['.card-header__title', '.checkout__store'])('%s inherits the card container color', (selector) => {
+    expect(rule(selector)).toMatch(/(^|\n)\s*color:\s*inherit;/)
+  })
+
+  it('sets no fixed color on any card title or category-icon wrapper', () => {
+    for (const selector of ['.tile__name', '.tile__icon', '.card-header__icon', '.checkout__icon', '.icon-picker__icon']) {
+      expect(rule(selector), selector).not.toMatch(/(^|[\s;])color:\s*(?!inherit)/)
+    }
+  })
+
+  it('has no app.css rule styling h1/h2 by element that could re-override card titles', () => {
+    expect(css).not.toMatch(/(^|[\s,>{}])h[1-6]\s*[,{:.[]/)
+  })
+
+  it('colors the checkout band from the palette with no hardcoded white fallback', () => {
+    const top = rule('.checkout__band--top')
+    expect(top).toMatch(/color:\s*var\(--card-on-accent\);/)
+    expect(top).not.toMatch(/#fff/i)
+  })
+})
+
+/*
+ * Card menu typography (v0.6.1 consistency pass): action labels use the Add
+ * Card screen's normal action typography (application font, body size,
+ * standard 600 button weight) rather than the previous heavier 650.
+ */
+describe('card menu typography (v0.6.1 consistency pass)', () => {
+  it('uses the Add Card font family, body size and standard button weight', () => {
+    const item = rule('.menu-list__item')
+    expect(item).toMatch(/font-family:\s*var\(--font-sans\);/)
+    expect(item).toMatch(/font-size:\s*var\(--font-size-md\);/)
+    expect(item).toMatch(/font-weight:\s*600;/)
+    expect(item).not.toMatch(/font-weight:\s*(650|700|bold)/)
+    // Same weight as the shared .button rule used by the Add Card forms.
+    expect(rule('.button')).toMatch(/font-weight:\s*600;/)
+    // The body (and so the Add Card screen) uses the same font family and size.
+    expect(baseCss).toMatch(/font-family:\s*var\(--font-sans\);\s*font-size:\s*var\(--font-size-md\);/)
+  })
+
+  it('keeps 48px rows, separators and row padding', () => {
+    const item = rule('.menu-list__item')
+    expect(item).toMatch(/min-height:\s*var\(--touch-target\);/)
+    expect(item).toMatch(/border-top:\s*1px solid var\(--color-border\);/)
+    expect(item).toMatch(/padding:\s*var\(--space-3\) var\(--space-5\);/)
+  })
+})
+
+/*
+ * Picker selection (v0.6.1 consistency pass): both pickers mark the selected
+ * option with a check mark only. No selected-state rule may change size,
+ * aspect ratio, border or ring, so selected and unselected options are
+ * identical apart from the check.
+ */
+describe('picker selection state (v0.6.1 consistency pass)', () => {
+  it('has no :checked rule that changes a swatch box, ring or border', () => {
+    const checkedRules = Array.from(css.matchAll(/([^{}]*:checked[^{}]*)\{([^}]*)\}/g), (m) => [m[1]!.trim(), m[2]!] as const)
+    for (const [selector, body] of checkedRules) {
+      expect(body, selector).not.toMatch(/box-shadow|border|outline|width|height|aspect-ratio|padding|margin|transform|scale|inset/)
+    }
+    expect(css).not.toMatch(/inset 0 0 0 3px currentColor/)
+  })
+
+  it('positions the icon check badge absolutely inside the swatch, so the swatch keeps its size', () => {
+    expect(rule('.icon-picker__swatch')).toMatch(/position:\s*relative;/)
+    const check = rule('.icon-picker__check')
+    expect(check).toMatch(/position:\s*absolute;/)
+    expect(check).toMatch(/pointer-events:\s*none;/)
+    // Disc in the inherited palette foreground: the badge must not set its own
+    // color, or currentColor would become the swatch colour (invisible disc).
+    expect(check).toMatch(/background:\s*currentColor;/)
+    expect(check).not.toMatch(/(^|[\s;])color:/)
+    // The check itself is drawn in the swatch colour, inverting the palette pair.
+    expect(rule('.icon-picker__check .button__icon')).toMatch(/color:\s*var\(--swatch-bg\);/)
+  })
+
+  it('keeps the swatch geometry identical for every option', () => {
+    expect(normalized('.icon-picker__swatch')).toBe(
+      'position: relative; display: grid; place-items: center; width: 100%; min-height: var(--touch-target); aspect-ratio: 1; max-width: 3.5rem; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18)',
+    )
+    expect(normalized('.color-picker__swatch')).toBe(
+      'position: relative; display: grid; place-items: center; aspect-ratio: 1; min-height: var(--touch-target); border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18); cursor: pointer',
+    )
+  })
+})
 
 describe('wallet tile layout (v0.6.1)', () => {
   it('is a short 3:2 rectangle, not a square', () => {

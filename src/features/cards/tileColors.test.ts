@@ -20,6 +20,51 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
+/*
+ * The one authoritative foreground per color (v0.6.1 consistency pass). Card
+ * names and category icons on every card surface inherit this value; the
+ * light colors use charcoal and the dark ones white. Pinned exactly so a
+ * palette edit cannot silently flip a title or icon color.
+ */
+const EXPECTED_FOREGROUND: Record<string, string> = {
+  red: '#ffffff',
+  orange: '#1a1a1a',
+  yellow: '#1a1a1a',
+  green: '#ffffff',
+  teal: '#ffffff',
+  blue: '#ffffff',
+  indigo: '#ffffff',
+  purple: '#ffffff',
+  pink: '#ffffff',
+  brown: '#ffffff',
+  slate: '#ffffff',
+  white: '#1a1a1a',
+}
+
+describe('tile palette foreground', () => {
+  it('has exactly the 12 existing color ids, in order', () => {
+    expect(TILE_COLORS.map((c) => c.id)).toEqual(Object.keys(EXPECTED_FOREGROUND))
+  })
+
+  it.each(TILE_COLORS.filter((c) => ['orange', 'yellow', 'white'].includes(c.id)).map((c) => [c.label, c] as const))(
+    'light tile %s uses the charcoal foreground',
+    (_label, color) => {
+      expect(color.text).toBe('#1a1a1a')
+    },
+  )
+
+  it.each(TILE_COLORS.filter((c) => !['orange', 'yellow', 'white'].includes(c.id)).map((c) => [c.label, c] as const))(
+    'dark tile %s uses the white foreground',
+    (_label, color) => {
+      expect(color.text).toBe('#ffffff')
+    },
+  )
+
+  it('matches the pinned mapping for every color', () => {
+    expect(Object.fromEntries(TILE_COLORS.map((c) => [c.id, c.text]))).toEqual(EXPECTED_FOREGROUND)
+  })
+})
+
 describe('tile palette', () => {
   it.each(TILE_COLORS.map((c) => [c.label, c] as const))('%s text meets 4.5:1 on its background', (_label, color) => {
     expect(contrast(color.text, color.background)).toBeGreaterThanOrEqual(4.5)

@@ -3,7 +3,7 @@
  * long-press now rearranges tiles instead).
  *
  * Four small steps inside one dialog: the menu (Rename / Change color /
- * Change icon / move actions / Delete), a rename form, a color picker and a
+ * Change icon / Move to first / Move to last / Delete), a rename form, a color picker and a
  * category icon picker. Delete hands back to the parent, which shows the
  * separate DeleteCardDialog confirmation.
  *
@@ -22,11 +22,13 @@
  * rows (`.card-menu__actions`) scroll, so the Close × is always reachable.
  *
  * Move actions are the keyboard- and screen-reader-accessible alternative to
- * dragging. "Move up" and "Move down" (internally the `earlier` / `later`
- * targets) mean one place back or forward in reading order (left to right,
- * then top to bottom), whatever the column count. Actions that cannot apply
- * (e.g. "Move up" on the first card) are
- * disabled, and the whole group is hidden when there is only one card.
+ * dragging. Only "Move to first" and "Move to last" are offered (v0.6.1
+ * consistency pass): one-step "Move up" / "Move down" were removed because
+ * drag-and-drop on the wallet already covers fine positioning, and they made
+ * the menu taller than needed. (walletOrder.ts still supports the one-step
+ * targets.) The two actions are always shown, so the menu has the same six
+ * rows for every card; an action that cannot apply (first on the first card,
+ * last on the last card, both on a single card) is disabled, not hidden.
  * `onMove` resolves to an error message or null; on failure the menu stays
  * open with the message and the saved order is unchanged.
  *
@@ -39,10 +41,8 @@
 import { useId, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react'
 import { Dialog } from '../../components/Dialog.tsx'
 import {
-  ArrowDownIcon,
   ArrowToBottomIcon,
   ArrowToTopIcon,
-  ArrowUpIcon,
   CloseIcon,
   DropIcon,
   PencilIcon,
@@ -134,14 +134,10 @@ export function CardMenu({ card, position, count, onClose, onRename, onRecolor, 
               <MenuItem ref={firstActionRef} icon={<PencilIcon />} label="Rename" onClick={() => setStep('rename')} />
               <MenuItem icon={<DropIcon />} label="Change color" onClick={() => setStep('color')} />
               <MenuItem icon={<TagIcon />} label="Change icon" onClick={() => setStep('icon')} />
-              {count > 1 && (
-                <div className="menu-list__group" role="group" aria-label={`Position ${position + 1} of ${count}`}>
-                  <MenuItem icon={<ArrowUpIcon />} label="Move up" disabled={atStart || moving} onClick={() => move('earlier')} />
-                  <MenuItem icon={<ArrowDownIcon />} label="Move down" disabled={atEnd || moving} onClick={() => move('later')} />
-                  <MenuItem icon={<ArrowToTopIcon />} label="Move to first" disabled={atStart || moving} onClick={() => move('first')} />
-                  <MenuItem icon={<ArrowToBottomIcon />} label="Move to last" disabled={atEnd || moving} onClick={() => move('last')} />
-                </div>
-              )}
+              <div className="menu-list__group" role="group" aria-label={`Position ${position + 1} of ${count}`}>
+                <MenuItem icon={<ArrowToTopIcon />} label="Move to first" disabled={atStart || moving} onClick={() => move('first')} />
+                <MenuItem icon={<ArrowToBottomIcon />} label="Move to last" disabled={atEnd || moving} onClick={() => move('last')} />
+              </div>
               <MenuItem icon={<TrashIcon />} label="Delete" danger onClick={onDelete} />
             </div>
             <div role="alert">{moveError && <p className="notice notice--error">{moveError}</p>}</div>

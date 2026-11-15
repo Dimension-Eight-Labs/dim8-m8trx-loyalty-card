@@ -937,17 +937,16 @@ describe('App', () => {
     await addManualCard(user, 'B', '2')
     await addManualCard(user, 'C', '3')
 
-    // Boundaries: the first card can't move up, the last can't move down.
+    // Boundaries: the first card can't move to first, the last can't move to
+    // last. Only first/last moves exist (v0.6.1); drag covers single steps.
     await user.click(screen.getByRole('button', { name: 'Options for A' }))
     expect(screen.getByRole('group', { name: 'Position 1 of 3' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Move up' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Move to first' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Move down' })).toBeEnabled()
-    expect(screen.queryByRole('button', { name: /Move earlier|Move later/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Move to last' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /Move up|Move down|Move earlier|Move later/ })).not.toBeInTheDocument()
     await user.keyboard('{Escape}')
     await user.click(screen.getByRole('button', { name: 'Options for C' }))
-    expect(screen.getByRole('button', { name: 'Move up' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Move down' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Move to first' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Move to last' })).toBeDisabled()
     await user.keyboard('{Escape}')
 
@@ -961,15 +960,14 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'C' })).toHaveFocus())
 
     await user.click(screen.getByRole('button', { name: 'Options for C' }))
-    await user.click(screen.getByRole('button', { name: 'Move down' }))
-    await waitFor(() => expect(tileOrder()).toEqual(['A', 'C', 'B']))
-    await user.click(screen.getByRole('button', { name: 'Options for A' }))
     await user.click(screen.getByRole('button', { name: 'Move to last' }))
-    await waitFor(() => expect(tileOrder()).toEqual(['C', 'B', 'A']))
+    await waitFor(() => expect(tileOrder()).toEqual(['A', 'B', 'C']))
+    expect(screen.getByText('C moved to position 3 of 3.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'C' })).toHaveFocus())
     await user.click(screen.getByRole('button', { name: 'Options for B' }))
-    await user.click(screen.getByRole('button', { name: 'Move up' }))
-    await waitFor(() => expect(tileOrder()).toEqual(['B', 'C', 'A']))
-    expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(['B', 'C', 'A'])
+    await user.click(screen.getByRole('button', { name: 'Move to first' }))
+    await waitFor(() => expect(tileOrder()).toEqual(['B', 'A', 'C']))
+    expect((await makeRepository().list()).map((card) => card.storeName)).toEqual(['B', 'A', 'C'])
   })
 
   it('keeps the menu open with a message when a keyboard move fails to save', async () => {
