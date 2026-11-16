@@ -142,6 +142,26 @@ describe('split-m8trx-backup.py', () => {
     expect(restored.map((c) => c.color)).toEqual(TILE_COLORS.map((c) => c.id))
   })
 
+  // v0.6.1 expansion: the splitter's parity id lists accept the three new
+  // colours and the Gear icon (explicit, not only via the registry loop above).
+  it('splits and restores cards with Petrol Teal, Olive, Dusty Rose and the Gear icon', async () => {
+    const wallet = [
+      card('n1', 'Machine Shop', { kind: 'text', value: 'N1' }, { color: 'petrol-teal', icon: 'gear' }),
+      card('n2', 'Surplus', { kind: 'text', value: 'N2' }, { color: 'olive' }),
+      card('n3', 'Florist', { kind: 'text', value: 'N3' }, { color: 'dusty-rose', icon: 'gear' }),
+    ]
+    const result = runSplit(writeBackup(await createBackup(wallet, meta)), '--max-cards', '2')
+    expect(result.stderr).toBe('')
+    expect(result.status).toBe(0)
+    expect(parts()).toHaveLength(2)
+    const restored = parts().flatMap((name) => parseBackup(readPart(name)))
+    expect(restored.map((c) => [c.id, c.color, c.icon])).toEqual([
+      ['n1', 'petrol-teal', 'gear'],
+      ['n2', 'olive', undefined],
+      ['n3', 'dusty-rose', 'gear'],
+    ])
+  })
+
   it('restores part by part: appends in import order, skips duplicates, keeps existing cards', async () => {
     const wallet = Array.from({ length: 5 }, (_, i) =>
       card(`c${i}`, `Sample ${i}`, i % 2 ? { kind: 'text', value: `TXT ${i}` } : { kind: 'image', image: image(i, 300) }),

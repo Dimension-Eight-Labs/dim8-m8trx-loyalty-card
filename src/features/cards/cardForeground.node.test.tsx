@@ -20,6 +20,7 @@
  * tests of the cascade and DOM, not of rendered pixels; the real-browser and
  * iPhone checks are listed in the task handoff.
  */
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { render, screen, within } from '@testing-library/react'
@@ -30,6 +31,7 @@ import { CardTile } from '../wallet/CardTile.tsx'
 import { CheckoutScreen } from '../checkout/CheckoutScreen.tsx'
 import type { LoyaltyCard } from './card.ts'
 import { CardCategoryIcon } from './CardCategoryIcon.tsx'
+import { CARD_ICON_IDS } from './cardIcons.ts'
 import { ColorPicker } from './ColorPicker.tsx'
 import { IconPicker } from './IconPicker.tsx'
 import { CHARCOAL, SOFT_SILVER, TILE_COLORS } from './tileColors.ts'
@@ -220,6 +222,85 @@ describe('Hardware category icon', () => {
   })
 })
 
+// ---- Gear artwork and preservation of the original eight ----------------------------
+
+describe('Gear category icon (v0.6.1)', () => {
+  it('is a symmetrical eight-tooth cog with a central circular opening, drawn like the rest of the set', () => {
+    const { container } = render(<CardCategoryIcon icon="gear" />)
+    const svg = container.querySelector('svg')!
+    expect(svg).toHaveAttribute('data-icon', 'gear')
+    expect(svg).toHaveAttribute('viewBox', '0 0 24 24')
+    expect(svg).toHaveAttribute('fill', 'none')
+    expect(svg).toHaveAttribute('stroke-linecap', 'round')
+    expect(svg).toHaveAttribute('stroke-linejoin', 'round')
+    expect(svg).toHaveAttribute('aria-hidden', 'true')
+    const g = svg.querySelector('g')!
+    expect(g).toHaveAttribute('stroke', 'currentColor')
+    expect(g).toHaveAttribute('stroke-width', '2')
+
+    // Central opening: a circle at the viewBox centre.
+    const hole = svg.querySelector('circle')!
+    expect([hole.getAttribute('cx'), hole.getAttribute('cy'), hole.getAttribute('r')]).toEqual(['12', '12', '3'])
+
+    // Outline: one closed path, eight tip arcs (r 10) and eight root arcs (r 7.25).
+    const paths = svg.querySelectorAll('path')
+    expect(paths).toHaveLength(1)
+    const d = paths[0]!.getAttribute('d')!
+    expect(d.endsWith('Z')).toBe(true)
+    expect(d.match(/A10 10 /g)).toHaveLength(8)
+    expect(d.match(/A7\.25 7\.25 /g)).toHaveLength(8)
+
+    // Every vertex is inside the 2–22 artwork box and lies on the tip or root
+    // circle about (12, 12): two tip vertices per tooth, eight teeth.
+    const vertices: Array<[number, number]> = []
+    const commands = d.match(/[MLA][^MLAZ]*/g)!
+    for (const command of commands) {
+      const values = (command.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+      vertices.push([values.at(-2)!, values.at(-1)!])
+    }
+    const radii = vertices.map(([x, y]) => Math.hypot(x - 12, y - 12))
+    for (const [x, y] of vertices) {
+      expect(x).toBeGreaterThanOrEqual(2)
+      expect(x).toBeLessThanOrEqual(22)
+      expect(y).toBeGreaterThanOrEqual(2)
+      expect(y).toBeLessThanOrEqual(22)
+    }
+    for (const r of radii) expect(Math.min(Math.abs(r - 10), Math.abs(r - 7.25))).toBeLessThan(0.02)
+    expect(radii.filter((r) => Math.abs(r - 10) < 0.02)).toHaveLength(16)
+
+    // Strokes only, no fills, no external references.
+    expect(svg.querySelector('image, use, [href], [fill]:not([fill="none"])')).toBeNull()
+  })
+
+  /*
+   * The eight original category drawings are approved artwork. Their rendered
+   * markup is pinned by hash (computed from the v0.6.1 baseline before Gear
+   * was added), so adding an icon cannot alter an existing one.
+   */
+  it.each([
+    ['fitness', '05ee7bf26ca98c63'],
+    ['grocery', '95001455a74dfb37'],
+    ['fuel', '741b18163a1b87c0'],
+    ['hardware', 'b3c81ba149c7e376'],
+    ['food', 'f323852af3eb2e40'],
+    ['coffee', 'b1d91399dff9d700'],
+    ['retail', '76da434c5bfc1143'],
+    ['events', 'a70c18c089aad9db'],
+  ] as const)('keeps the approved %s artwork unchanged', (icon, hash) => {
+    const { container } = render(<CardCategoryIcon icon={icon} />)
+    const markup = container.querySelector('svg')!.outerHTML
+    expect(createHash('sha256').update(markup).digest('hex').slice(0, 16)).toBe(hash)
+  })
+
+  it('renders every icon id, including gear, with artwork', () => {
+    for (const icon of CARD_ICON_IDS) {
+      const { container, unmount } = render(<CardCategoryIcon icon={icon} />)
+      expect(container.querySelector('g')!.children.length, icon).toBeGreaterThan(0)
+      unmount()
+    }
+  })
+})
+
 // ---- Icon-picker selection --------------------------------------------------------
 
 describe('icon picker selection', () => {
@@ -249,12 +330,34 @@ describe('icon picker selection', () => {
     expect(swatch).toHaveStyle({ color: '#1A1A1A' })
   })
 
+  it('offers None plus the nine categories, in order, ending with Gear (two rows of five)', () => {
+    render(<IconPicker name="t" value="gear" color="petrol-teal" onChange={() => {}} />)
+    const radios = screen.getAllByRole('radio') as HTMLInputElement[]
+    expect(radios.map((radio) => radio.value)).toEqual(['none', ...CARD_ICON_IDS])
+    expect(Array.from(document.querySelectorAll('.icon-picker__label'), (node) => node.textContent)).toEqual([
+      'None',
+      'Fitness',
+      'Grocery',
+      'Fuel',
+      'Hardware',
+      'Food',
+      'Coffee',
+      'Retail',
+      'Events',
+      'Gear',
+    ])
+    expect(radios.length % 5).toBe(0)
+    expect(screen.getByRole('radio', { name: 'Gear' })).toBeChecked()
+    expect(within(swatchOf('Gear')).getByTestId('icon-picker-check')).toBeInTheDocument()
+    expect(swatchOf('Gear').querySelector('svg[data-icon="gear"]')).not.toBeNull()
+  })
+
   it('keeps native radio semantics and arrow-key selection', async () => {
     const onChange = vi.fn()
     const user = userEvent.setup()
     render(<IconPicker name="t" value="fitness" color="blue" onChange={onChange} />)
     expect(screen.getByRole('group', { name: 'Icon' })).toBeInTheDocument()
-    expect(screen.getAllByRole('radio')).toHaveLength(9)
+    expect(screen.getAllByRole('radio')).toHaveLength(10)
     const fitness = screen.getByRole('radio', { name: 'Fitness' })
     expect(fitness).toBeChecked()
     fitness.focus()
@@ -268,11 +371,11 @@ describe('icon picker selection', () => {
 describe('color picker (industrial palette)', () => {
   const optionOf = (label: string) => screen.getByRole('radio', { name: label }).closest('label')!
 
-  it('shows the twelve approved names, in approved order, as native radios named by those names', () => {
+  it('shows the fifteen approved names, in approved order, as native radios named by those names', () => {
     render(<ColorPicker name="c" value="blue" onChange={() => {}} />)
     expect(screen.getByRole('group', { name: 'Tile color' })).toBeInTheDocument()
     const radios = screen.getAllByRole('radio')
-    expect(radios).toHaveLength(12)
+    expect(radios).toHaveLength(15)
     expect(radios.map((radio) => radio.getAttribute('aria-label'))).toEqual(TILE_COLORS.map((c) => c.label))
     expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(TILE_COLORS.map((c) => c.id))
     for (const radio of radios) {
@@ -293,6 +396,9 @@ describe('color picker (industrial palette)', () => {
       'Antique Gold',
       'Ivory',
       'Deep Violet',
+      'Petrol Teal',
+      'Olive',
+      'Dusty Rose',
     ])
   })
 

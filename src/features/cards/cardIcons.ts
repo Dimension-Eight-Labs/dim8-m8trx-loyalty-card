@@ -16,7 +16,7 @@
  *
  * Technology-neutral: the artwork lives in CardCategoryIcon.tsx.
  */
-export const CARD_ICON_IDS = ['fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events'] as const
+export const CARD_ICON_IDS = ['fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events', 'gear'] as const
 
 export type CardIconId = (typeof CARD_ICON_IDS)[number]
 
@@ -26,7 +26,10 @@ export interface CardIconOption {
   label: string
 }
 
-/** Picker order. "None" is offered separately by the picker itself. */
+/**
+ * Picker order. "None" is offered separately by the picker itself, ahead of
+ * these nine, giving ten choices: two complete rows in the five-column picker.
+ */
 export const CARD_ICONS: readonly CardIconOption[] = [
   { id: 'fitness', label: 'Fitness' },
   { id: 'grocery', label: 'Grocery' },
@@ -36,6 +39,8 @@ export const CARD_ICONS: readonly CardIconOption[] = [
   { id: 'coffee', label: 'Coffee' },
   { id: 'retail', label: 'Retail' },
   { id: 'events', label: 'Events' },
+  // v0.6.1: machinery, manufacturing, engineering and industrial equipment.
+  { id: 'gear', label: 'Gear' },
 ]
 
 export function isCardIconId(value: unknown): value is CardIconId {

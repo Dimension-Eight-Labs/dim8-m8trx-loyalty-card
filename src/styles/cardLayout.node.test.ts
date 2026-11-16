@@ -71,7 +71,7 @@ describe('locked wallet tile geometry (v0.6.1)', () => {
  * h1/h2 with the app's light heading color; a color declared on the element
  * beats a color inherited from the card container, so each card heading must
  * explicitly inherit. cardForeground.node.test.tsx runs the real cascade in
- * jsdom for all 12 colors; these are the stylesheet contracts behind it.
+ * jsdom for all 15 colors; these are the stylesheet contracts behind it.
  */
 describe('card foreground inheritance (v0.6.1 consistency pass)', () => {
   it('still has the global heading color that card headings must opt out of', () => {
@@ -279,5 +279,79 @@ describe('checkout card bands (v0.6.1)', () => {
     expect(image).toMatch(/width:\s*100%/)
     expect(image).toMatch(/height:\s*100%/)
     expect(css).toMatch(/\.barcode__image\s*\{[^}]*object-fit:\s*contain/)
+  })
+})
+
+/*
+ * Picker grids (v0.6.1 final palette expansion): both pickers use exactly
+ * five columns, so fifteen colours form three complete rows and None plus
+ * nine categories form two. minmax(0, 1fr) lets columns shrink on narrow
+ * phones; the swatch keeps its own touch-target minimum and size cap.
+ */
+describe('five-column pickers (v0.6.1 final palette expansion)', () => {
+  it.each(['.color-picker__swatches', '.icon-picker__options'])('%s is a fixed five-column grid with the existing gap', (selector) => {
+    expect(normalized(selector)).toBe('display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2)')
+  })
+
+  it('lets picker labels use half a gap on each side, never more (no overlap with neighbours)', () => {
+    for (const selector of ['.color-picker__label', '.icon-picker__label']) {
+      expect(rule(selector), selector).toMatch(/max-width:\s*calc\(100% \+ var\(--space-2\)\);/)
+    }
+    // The option centres its label, so the overflow is split evenly across both gaps.
+    for (const selector of ['.color-picker__option', '.icon-picker__option']) expect(rule(selector)).toMatch(/align-items:\s*center;/)
+    expect(rule('.color-picker__label')).toMatch(/overflow-wrap:\s*break-word;/)
+  })
+
+  it('keeps the swatch touch-target minimum and size cap', () => {
+    for (const selector of ['.color-picker__swatch', '.icon-picker__swatch']) {
+      expect(rule(selector), selector).toMatch(/min-height:\s*var\(--touch-target\);/)
+      expect(rule(selector), selector).toMatch(/max-width:\s*3\.5rem;/)
+      expect(rule(selector), selector).toMatch(/aspect-ratio:\s*1;/)
+    }
+  })
+})
+
+/*
+ * Flat card surfaces (v0.6.1 gradient finding). The wallet tile, the
+ * card-menu identity header and the checkout bands show the exact palette
+ * colour with no sheen gradient, gloss, texture, filter or blend overlay.
+ * Every rule whose selector targets one of these surfaces (including state
+ * variants and pseudo-elements) is checked, so an overlay cannot return via
+ * a ::before/::after layer either.
+ */
+describe('flat card surfaces (v0.6.1 gradient finding)', () => {
+  const SURFACE = /\.(tile|tile__open|tile--[\w-]+|card-header|checkout__band|checkout__band--top|checkout__band--bottom)(?![\w-])/
+  const OVERLAY = /gradient|background-image|url\(|filter|mix-blend-mode|background-blend-mode|mask|text-shadow|animation/
+  const uncommented = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  const surfaceRules = Array.from(uncommented.matchAll(/([^{}]+)\{([^{}]*)\}/g), (m) => [m[1]!.trim(), m[2]!] as const).filter(([selector]) =>
+    SURFACE.test(selector),
+  )
+
+  it('finds the rules for all three surfaces', () => {
+    const selectors = surfaceRules.map(([selector]) => selector)
+    for (const expected of ['.tile', '.tile__open', '.card-header', '.checkout__band', '.checkout__band--top']) {
+      expect(selectors, expected).toContain(expected)
+    }
+  })
+
+  it('has no gradient, image, texture, filter or blend layer on any card surface rule', () => {
+    for (const [selector, body] of surfaceRules) expect(body, selector).not.toMatch(OVERLAY)
+  })
+
+  it('leaves the tile button transparent so the inline palette colour shows unaltered', () => {
+    expect(rule('.tile__open')).toMatch(/background:\s*transparent;/)
+  })
+
+  it('paints the checkout bands with the palette colour only', () => {
+    expect(normalized('.checkout__band')).toBe('flex: none; background: var(--card-accent, #455a64)')
+  })
+
+  it('has no card-surface pseudo-element overlay other than the drag drop-slot outline', () => {
+    const pseudo = surfaceRules.map(([selector]) => selector).filter((selector) => /::?(before|after)/.test(selector))
+    expect(pseudo).toEqual(['.tile--dragging::before'])
+  })
+
+  it('keeps the existing white sheen gradient out of the whole stylesheet', () => {
+    expect(css).not.toMatch(/linear-gradient\(160deg/)
   })
 })

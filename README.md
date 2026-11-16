@@ -121,6 +121,26 @@ backup-format change.
   database or backup-format change). Contrast note: card names on Brushed
   Steel (3.45:1), Copper (3.97:1) and Antique Gold (3.36:1) are below the
   WCAG 4.5:1 level for normal-size text (all colors reach 3:1).
+- **Final palette expansion.** Three colors are appended after Deep Violet:
+  **Petrol Teal** (#28747B), **Olive** (#626B38) and **Dusty Rose**
+  (#A36C78), each with the Soft Silver foreground, for **15 colors** in
+  total. Their stored identifiers are `petrol-teal`, `olive` and
+  `dusty-rose`; the original twelve identifiers are unchanged. Contrast
+  note: Dusty Rose is 3.54:1 (below 4.5:1 for normal-size text, above 3:1),
+  joining the recorded exceptions; Petrol Teal (≈4.55:1) and Olive (≈4.79:1)
+  meet 4.5:1.
+- **Gear category icon.** A new **Gear** category (identifier `gear`, an
+  original eight-tooth cog with a central opening) for machinery,
+  manufacturing, engineering and industrial equipment. The icon picker now
+  offers ten choices: None plus nine categories.
+- **Five-column pickers.** The color picker shows three complete rows of
+  five and the icon picker two complete rows of five; swatch size, gaps,
+  labels, check marks and radio behavior are unchanged.
+- **Flat card surfaces.** The leftover white sheen gradient was removed from
+  the wallet tile, the ⋯ menu's colored header and the checkout card's upper
+  band, so all three show the exact flat palette color.
+- No database or backup-format change: the new identifiers are simply
+  additional valid values.
 
 ### v0.6.0 — UI polish and card tile redesign
 
@@ -263,7 +283,7 @@ JSON file named `m8trx-backup-YYYY-MM-DD.m8trx`:
   Generated barcodes are stored as format + value, as in the wallet.
 - `order` is the wallet order and must name every card exactly once.
 - `icon` (v0.6.0) is optional: one of `fitness`, `grocery`, `fuel`,
-  `hardware`, `food`, `coffee`, `retail`, `events`. Export omits it for
+  `hardware`, `food`, `coffee`, `retail`, `events`, `gear` (v0.6.1). Export omits it for
   None; a file without it (e.g. from v0.5.x) restores those cards as None.
   Any other value, including `null`, makes restore reject the file as
   damaged. Icons play no part in duplicate detection.
@@ -865,17 +885,20 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
   ellipsis itself is checked visually, not by these tests.
 - **Card foreground and selection (v0.6.1 consistency pass)**
   (`cardForeground.node.test.tsx`, `tileColors.test.ts`,
-  `cardLayout.node.test.ts`, `CardMenu.test.tsx`): the exact 12-color
-  foreground mapping; for every color, the real base.css/app.css cascade run
+  `cardLayout.node.test.ts`, `CardMenu.test.tsx`): the exact 15-color
+  palette and foreground mapping; for every color, the real base.css/app.css cascade run
   in jsdom shows the name and icon computing to the same palette foreground
   on the tile, card-menu header, checkout band and icon preview (the global
   heading color cannot override them); the nut-and-bolt Hardware artwork;
+  the Gear artwork and hash-pinned markup of the other seven original
+  icons; five-column picker grids (15 colors, 10 icon choices); no
+  gradient, image, filter or blend layer on any card-surface rule;
   icon-picker check marks (None included) with radio semantics and arrow
   keys; selected-state CSS that changes no size, ring or border; menu
   typography tokens; the six-action menu without Move up/down; and the
   locked tile geometry declarations. Host tests only: pixels, Mobile Safari
   font rendering and small-icon legibility are checked on the device.
-- **Wallet/checkout UI**: palette contrast ≥ 4.5:1, checkout card structure
+- **Wallet/checkout UI**: palette contrast (≥ 3:1 for every pair; the four recorded exceptions below 4.5:1 are pinned in `tileColors.test.ts`), checkout card structure
   (name above pagination, barcode inside the card, accent local to the card),
   swipe-down close, and taps/short/diagonal/upward/cancelled gestures not
   closing.
@@ -888,6 +911,21 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
 These do not prove behaviour on a phone. See the checklist below.
 
 ### Real-device checklist (not verifiable in host tests)
+
+**v0.6.1 physical-iPhone acceptance (final palette expansion).** None of
+these have been performed yet; record results per item.
+
+1. Add Card and ⋯ → Change color show three complete rows of five colors,
+   ending with Petrol Teal, Olive and Dusty Rose; every name is readable
+   and every swatch easy to tap on the narrowest supported iPhone.
+2. Add Card and ⋯ → Change icon show two complete rows of five icon choices
+   (None … Events, Gear); labels are readable and Gear reads as a gear at
+   tile and picker size.
+3. Tiles, the ⋯ menu header and the checkout upper band look flat (no
+   lighter upper-left sheen) on every color, including the three new ones.
+4. Card names and icons on Dusty Rose remain acceptably legible (3.54:1).
+5. A card with a new color and the Gear icon survives Export all cards and
+   restore.
 
 **v0.6.1 physical-iPhone acceptance (mobile UI refinement).** None of
 these have been performed yet; record results per item.

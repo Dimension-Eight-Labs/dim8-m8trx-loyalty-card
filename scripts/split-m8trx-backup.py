@@ -95,15 +95,17 @@ CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 # Tile colour palette ids (TILE_COLORS in src/features/cards/tileColors.ts).
 # Legacy opaque keys: since app 0.6.1 they name industrial-palette colours
-# (e.g. "blue" is Gunmetal), but the stored strings are unchanged.
+# (e.g. "blue" is Gunmetal), but the stored strings are unchanged. The last
+# three (Petrol Teal, Olive, Dusty Rose) were appended later in 0.6.1.
 TILE_COLOR_IDS = frozenset(
-    ["red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink", "brown", "slate", "white"]
+    ["red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink", "brown", "slate", "white",
+     "petrol-teal", "olive", "dusty-rose"]
 )
 
 # Optional category icon ids (CARD_ICON_IDS in src/features/cards/cardIcons.ts,
 # app 0.6.0). A card without "icon" means None; a present value must be one of
 # these exact strings (null or any other value is rejected, as by the app).
-CARD_ICON_IDS = frozenset(["fitness", "grocery", "fuel", "hardware", "food", "coffee", "retail", "events"])
+CARD_ICON_IDS = frozenset(["fitness", "grocery", "fuel", "hardware", "food", "coffee", "retail", "events", "gear"])
 
 # Characters JavaScript's String.prototype.trim() removes (WhiteSpace and
 # LineTerminator in ECMAScript). Python's str.strip() uses a different set

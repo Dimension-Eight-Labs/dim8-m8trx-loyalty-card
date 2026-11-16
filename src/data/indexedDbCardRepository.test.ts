@@ -624,4 +624,26 @@ describe('palette color identifiers (industrial palette, v0.6.1)', () => {
     expect(after).toEqual(before)
     expect(after.map((c) => c.color)).toEqual(TILE_COLORS.map((c) => c.id))
   })
+  // v0.6.1 palette expansion: the three new colours and the Gear icon are
+  // ordinary identifiers; creating, editing and reloading them needs no
+  // schema change or migration.
+  it('creates, edits and reloads cards with the new colours and the Gear icon', async () => {
+    const time = clock()
+    const repo = makeRepository({ now: time.now })
+    const teal = await repo.create({ ...coffee, storeName: 'Machine Shop', color: 'petrol-teal', icon: 'gear' })
+    const olive = await repo.create({ ...coffee, storeName: 'Surplus', color: 'olive' })
+    expect(await readRawCard(teal.id)).toMatchObject({ color: 'petrol-teal', icon: 'gear' })
+    time.advance()
+    const rose = await repo.update(olive.id, { color: 'dusty-rose', icon: 'gear' })
+    expect(rose).toMatchObject({ color: 'dusty-rose', icon: 'gear' })
+    const recolored = await repo.update(teal.id, { color: 'olive' })
+    expect(recolored).toMatchObject({ color: 'olive', icon: 'gear' })
+    repo.close()
+
+    const listed = await makeRepository().list()
+    expect(listed.map((c) => [c.storeName, c.color, c.icon])).toEqual([
+      ['Machine Shop', 'olive', 'gear'],
+      ['Surplus', 'dusty-rose', 'gear'],
+    ])
+  })
 })

@@ -9,8 +9,8 @@
  * gradients, highlights or textures (a brushed-metal treatment would need a
  * separate review).
  *
- * Identifiers: cards store a palette id (not a raw colour). The ids below are
- * LEGACY OPAQUE PERSISTENCE KEYS retained from the earlier bright palette so
+ * Identifiers: cards store a palette id (not a raw colour). The first twelve
+ * ids below are LEGACY OPAQUE PERSISTENCE KEYS retained from the earlier bright palette so
  * existing IndexedDB records and previously exported `.m8trx` backups keep
  * validating and rendering without a migration. An id's spelling no longer
  * describes its appearance (e.g. `blue` is Gunmetal); `label` and
@@ -21,15 +21,15 @@
  *
  * Foreground: each entry carries the one approved foreground (`text`) shared
  * by the store name AND the category icon (CardCategoryIcon draws with
- * currentColor). Soft Silver #E8ECEB on the eleven dark colours, Charcoal
+ * currentColor). Soft Silver #E8ECEB on the fourteen dark colours, Charcoal
  * #1A1A1A on Ivory only. Components must use this value rather than
  * computing their own.
  *
  * Contrast (WCAG 2.x, computed from these hex values in tileColors.test.ts):
- * all pairs reach 3:1 (graphical objects / large text). Three approved
+ * all pairs reach 3:1 (graphical objects / large text). Four approved
  * combinations fall below 4.5:1 for normal-size text — Brushed Steel 3.45:1,
- * Copper 3.97:1, Antique Gold 3.36:1. These are recorded as owner-reported
- * exceptions, not silently corrected.
+ * Copper 3.97:1, Antique Gold 3.36:1 and Dusty Rose 3.54:1. These are
+ * recorded as owner-reported exceptions, not silently corrected.
  */
 export interface TileColor {
   /** Legacy opaque persistence key; see the module comment. */
@@ -41,12 +41,13 @@ export interface TileColor {
   text: string
 }
 
-/** Soft Silver: approved foreground on the eleven dark palette colours. */
+/** Soft Silver: approved foreground on the fourteen dark palette colours. */
 export const SOFT_SILVER = '#E8ECEB'
 /** Charcoal: approved foreground on Ivory only. */
 export const CHARCOAL = '#1A1A1A'
 
-/* Approved order — the picker renders entries in exactly this sequence. */
+/* Approved order — the picker renders entries in exactly this sequence
+ * (fifteen entries: three complete rows in the five-column picker). */
 export const TILE_COLORS: readonly TileColor[] = [
   { id: 'blue', label: 'Gunmetal', background: '#414A52', text: SOFT_SILVER },
   { id: 'teal', label: 'Brushed Steel', background: '#727F89', text: SOFT_SILVER },
@@ -60,6 +61,12 @@ export const TILE_COLORS: readonly TileColor[] = [
   { id: 'yellow', label: 'Antique Gold', background: '#9B7B20', text: SOFT_SILVER },
   { id: 'white', label: 'Ivory', background: '#E5E0D1', text: CHARCOAL },
   { id: 'purple', label: 'Deep Violet', background: '#51436C', text: SOFT_SILVER },
+  // Appended in the v0.6.1 final palette expansion. These ids are new (not
+  // legacy keys), so their spelling does describe the colour; like every id
+  // above they are permanent once shipped.
+  { id: 'petrol-teal', label: 'Petrol Teal', background: '#28747B', text: SOFT_SILVER },
+  { id: 'olive', label: 'Olive', background: '#626B38', text: SOFT_SILVER },
+  { id: 'dusty-rose', label: 'Dusty Rose', background: '#A36C78', text: SOFT_SILVER },
 ] as const
 
 /** Fallback for unknown ids (e.g. a record from a future version): Midnight Blue. */

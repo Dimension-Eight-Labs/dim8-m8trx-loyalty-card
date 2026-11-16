@@ -1596,14 +1596,14 @@ describe('UI polish and category icons (v0.6.0)', () => {
     const icons = screen.getByRole('group', { name: 'Icon' })
     expect(colors.nextElementSibling).toBe(icons)
     const radios = within(icons).getAllByRole('radio')
-    expect(radios.map((radio) => radio.getAttribute('value'))).toEqual(['none', 'fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events'])
+    expect(radios.map((radio) => radio.getAttribute('value'))).toEqual(['none', 'fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events', 'gear'])
     expect(within(icons).getByRole('radio', { name: 'None' })).toBeChecked()
     // Previews draw each icon in the chosen color's text color, like the tile.
     for (const preview of icons.querySelectorAll('svg[data-icon]')) {
       expect(preview.querySelector('g')).toHaveAttribute('stroke', 'currentColor')
       expect(preview.querySelector('[data-part="halo"]')).toBeNull()
     }
-    for (const label of ['Fitness', 'Grocery', 'Fuel', 'Hardware', 'Food', 'Coffee', 'Retail', 'Events']) {
+    for (const label of ['Fitness', 'Grocery', 'Fuel', 'Hardware', 'Food', 'Coffee', 'Retail', 'Events', 'Gear']) {
       expect(within(icons).getByRole('radio', { name: label })).not.toBeChecked()
       expect(within(icons).getByText(label)).toBeVisible()
     }
@@ -1635,6 +1635,62 @@ describe('UI polish and category icons (v0.6.0)', () => {
     const reloaded = await screen.findByRole('button', { name: 'Morning Brew' })
     expect(reloaded.querySelector('svg[data-icon="coffee"]')).toBeInTheDocument()
     expect((await makeRepository().list())[0]).toMatchObject({ icon: 'coffee', storeName: 'Morning Brew' })
+  })
+
+  // v0.6.1 final palette expansion: the three new colours and Gear work end
+  // to end through Add Card, reload, Change color, Change icon and checkout.
+  it('creates, reloads, edits and checks out a card with the new colours and the Gear icon', async () => {
+    const { user, unmount } = renderApp()
+    await openDetails(user, '77')
+    const colorRadios = within(screen.getByRole('group', { name: 'Color' })).getAllByRole('radio')
+    expect(colorRadios).toHaveLength(15)
+    expect(colorRadios.slice(12).map((radio) => radio.getAttribute('aria-label'))).toEqual(['Petrol Teal', 'Olive', 'Dusty Rose'])
+    expect(within(screen.getByRole('group', { name: 'Icon' })).getAllByRole('radio')).toHaveLength(10)
+    await user.type(screen.getByLabelText('Store name'), 'Machine Shop')
+    await user.click(screen.getByRole('radio', { name: 'Petrol Teal' }))
+    await user.click(screen.getByRole('radio', { name: 'Gear' }))
+    await user.click(screen.getByRole('button', { name: 'Save card' }))
+
+    const tile = await screen.findByRole('button', { name: 'Machine Shop' })
+    expect(tile.closest('li')).toHaveStyle({ background: '#28747B', color: '#E8ECEB' })
+    expect(tile.querySelector('svg[data-icon="gear"] g')).toHaveAttribute('stroke', 'currentColor')
+    expect((await makeRepository().list())[0]).toMatchObject({ color: 'petrol-teal', icon: 'gear' })
+    unmount()
+
+    // Reload, then recolor to Olive and then Dusty Rose from the options menu.
+    const { user: again } = renderApp()
+    const reloaded = await screen.findByRole('button', { name: 'Machine Shop' })
+    expect(reloaded.querySelector('svg[data-icon="gear"]')).toBeInTheDocument()
+    for (const [label, hex, id] of [
+      ['Olive', '#626B38', 'olive'],
+      ['Dusty Rose', '#A36C78', 'dusty-rose'],
+    ] as const) {
+      await again.click(screen.getByRole('button', { name: 'Options for Machine Shop' }))
+      await again.click(screen.getByRole('button', { name: 'Change color' }))
+      expect(within(screen.getByRole('group', { name: 'Tile color' })).getAllByRole('radio')).toHaveLength(15)
+      await again.click(screen.getByRole('radio', { name: label }))
+      await again.click(screen.getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Machine Shop' }).closest('li')).toHaveStyle({ background: hex }))
+      expect((await makeRepository().list())[0]).toMatchObject({ color: id, icon: 'gear' })
+    }
+
+    // Change icon shows Gear selected among ten choices.
+    await again.click(screen.getByRole('button', { name: 'Options for Machine Shop' }))
+    await again.click(screen.getByRole('button', { name: 'Change icon' }))
+    expect(screen.getAllByRole('radio')).toHaveLength(10)
+    expect(screen.getByRole('radio', { name: 'Gear' })).toBeChecked()
+    await again.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect((await makeRepository().list())[0]).toMatchObject({ color: 'dusty-rose', icon: 'gear' })
+
+    // Checkout: Dusty Rose band with the Gear icon in the palette foreground.
+    await again.click(screen.getByRole('button', { name: 'Machine Shop' }))
+    const face = screen.getByTestId('checkout-card')
+    expect(face.style.getPropertyValue('--card-accent')).toBe('#A36C78')
+    expect(face.style.getPropertyValue('--card-on-accent')).toBe('#E8ECEB')
+    const band = screen.getByTestId('checkout-band')
+    expect(within(band).getByRole('heading', { level: 1 })).toHaveTextContent('Machine Shop')
+    expect(band.querySelector('svg[data-icon="gear"]')).not.toBeNull()
   })
 
   it('changes and removes an existing card’s icon from the options menu', async () => {

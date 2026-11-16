@@ -147,6 +147,36 @@ describe('palette color identifiers (industrial palette, v0.6.1)', () => {
     for (const c of restored) expect(labels.has(tileColor(c.color).label)).toBe(true)
     expect(new Set(restored.map((c) => tileColor(c.color).label)).size).toBe(12)
   })
+  // v0.6.1 expansion: new ids use the unchanged version-1 backup format.
+  it('exports and restores the three new colours and the Gear icon verbatim', async () => {
+    const added = [
+      card('n1', 'Machine Shop', { kind: 'text', value: 'N1' }, { color: 'petrol-teal', icon: 'gear' }),
+      card('n2', 'Surplus', { kind: 'text', value: 'N2' }, { color: 'olive' }),
+      card('n3', 'Florist', { kind: 'text', value: 'N3' }, { color: 'dusty-rose', icon: 'gear' }),
+    ]
+    const doc = await backupOf(added)
+    expect(doc.version).toBe(1)
+    expect(doc.cards.map((c) => [c.color, c.icon])).toEqual([
+      ['petrol-teal', 'gear'],
+      ['olive', undefined],
+      ['dusty-rose', 'gear'],
+    ])
+    const restored = parseBackup(JSON.stringify(doc))
+    expect(restored.map((c) => [c.id, c.color, c.icon])).toEqual([
+      ['n1', 'petrol-teal', 'gear'],
+      ['n2', 'olive', undefined],
+      ['n3', 'dusty-rose', 'gear'],
+    ])
+    expect(restored.map((c) => tileColor(c.color).label)).toEqual(['Petrol Teal', 'Olive', 'Dusty Rose'])
+  })
+
+  it('detects a duplicate of a card using a new colour and the Gear icon', async () => {
+    const machine = card('n1', 'Machine Shop', { kind: 'text', value: 'N1' }, { color: 'petrol-teal', icon: 'gear' })
+    const cards = parseBackup(await createBackup([machine], meta))
+    // Same card already present under another id, recoloured and without an icon.
+    const plan = await planRestore(cards, [{ ...machine, id: 'other', color: 'dusty-rose', icon: undefined }])
+    expect(plan.duplicates.map((c) => c.id)).toEqual(['n1'])
+  })
 })
 
 describe('category icons (v0.6.0)', () => {

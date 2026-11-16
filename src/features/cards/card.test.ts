@@ -22,9 +22,10 @@ describe('card domain', () => {
     ).toMatch(/Choose a tile color\./)
   })
 
-  it('treats a missing icon as None and accepts only the eight supported identifiers', () => {
-    expect(CARD_ICON_IDS).toEqual(['fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events'])
-    expect(CARD_ICONS.map((icon) => icon.label)).toEqual(['Fitness', 'Grocery', 'Fuel', 'Hardware', 'Food', 'Coffee', 'Retail', 'Events'])
+  it('treats a missing icon as None and accepts only the nine supported identifiers', () => {
+    expect(CARD_ICON_IDS).toEqual(['fitness', 'grocery', 'fuel', 'hardware', 'food', 'coffee', 'retail', 'events', 'gear'])
+    expect(CARD_ICONS.map((icon) => icon.id)).toEqual(CARD_ICON_IDS)
+    expect(CARD_ICONS.map((icon) => icon.label)).toEqual(['Fitness', 'Grocery', 'Fuel', 'Hardware', 'Food', 'Coffee', 'Retail', 'Events', 'Gear'])
     expect(validateIcon(undefined)).toBeNull()
     for (const id of CARD_ICON_IDS) expect(validateIcon(id)).toBeNull()
     for (const bad of [null, '', 'none', 'Coffee', 'rocket', 3]) {
@@ -34,6 +35,8 @@ describe('card domain', () => {
     const base = { storeName: 'Shop', color: 'red', barcode: { kind: 'text' as const, value: '1' } }
     expect(validateNewCard(base)).toBeNull()
     expect(validateNewCard({ ...base, icon: 'fuel' })).toBeNull()
+    expect(validateNewCard({ ...base, icon: 'gear' })).toBeNull()
+    for (const color of ['petrol-teal', 'olive', 'dusty-rose']) expect(validateNewCard({ ...base, color })).toBeNull()
     expect(validateNewCard({ ...base, icon: 'rocket' as never })).toMatch(/icon/)
   })
 

@@ -41,14 +41,34 @@ const APPROVED: ReadonlyArray<readonly [id: string, label: string, background: s
   ['yellow', 'Antique Gold', '#9B7B20', '#E8ECEB'],
   ['white', 'Ivory', '#E5E0D1', '#1A1A1A'],
   ['purple', 'Deep Violet', '#51436C', '#E8ECEB'],
+  // Appended in the v0.6.1 final palette expansion (new, descriptive ids).
+  ['petrol-teal', 'Petrol Teal', '#28747B', '#E8ECEB'],
+  ['olive', 'Olive', '#626B38', '#E8ECEB'],
+  ['dusty-rose', 'Dusty Rose', '#A36C78', '#E8ECEB'],
 ]
 
 /** The pre-0.6.1 identifier set; every one must still resolve to itself. */
 const LEGACY_IDS = ['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'white']
 
+/** Ids added by the v0.6.1 palette expansion, appended after the twelve. */
+const ADDED_IDS = ['petrol-teal', 'olive', 'dusty-rose']
+
 describe('approved industrial palette', () => {
-  it('has exactly twelve entries', () => {
-    expect(TILE_COLORS).toHaveLength(12)
+  it('has exactly fifteen entries (three complete picker rows of five)', () => {
+    expect(TILE_COLORS).toHaveLength(15)
+    expect(TILE_COLORS.length % 5).toBe(0)
+  })
+
+  it('keeps the original twelve colours first and unchanged, with the three new colours appended', () => {
+    expect(TILE_COLORS.slice(0, 12).map((c) => [c.id, c.label, c.background, c.text])).toEqual(APPROVED.slice(0, 12))
+    expect(TILE_COLORS.slice(12).map((c) => c.label)).toEqual(['Petrol Teal', 'Olive', 'Dusty Rose'])
+  })
+
+  it('has unique ids, names and background colours', () => {
+    for (const key of ['id', 'label', 'background'] as const) {
+      const values = TILE_COLORS.map((c) => c[key].toLowerCase())
+      expect(new Set(values).size, key).toBe(values.length)
+    }
   })
 
   it('matches the approved ids, names, hex values, foregrounds and order exactly', () => {
@@ -74,11 +94,12 @@ describe('approved industrial palette', () => {
 })
 
 describe('legacy color identifiers', () => {
-  it('retains exactly the pre-0.6.1 id set, so stored cards and old backups stay valid', () => {
-    expect(TILE_COLORS.map((c) => c.id).sort()).toEqual([...LEGACY_IDS].sort())
+  it('retains every pre-0.6.1 id (stored cards and old backups stay valid) and adds only the three new ids', () => {
+    expect(TILE_COLORS.map((c) => c.id).sort()).toEqual([...LEGACY_IDS, ...ADDED_IDS].sort())
+    expect(TILE_COLORS.slice(12).map((c) => c.id)).toEqual(ADDED_IDS)
   })
 
-  it.each(LEGACY_IDS)('stored id %s is valid and renders its own palette entry', (id) => {
+  it.each([...LEGACY_IDS, ...ADDED_IDS])('stored id %s is valid and renders its own palette entry', (id) => {
     expect(isTileColorId(id)).toBe(true)
     expect(tileColor(id).id).toBe(id)
   })
@@ -90,12 +111,12 @@ describe('legacy color identifiers', () => {
   })
 
   it('cycles default colours through the approved order', () => {
-    expect(Array.from({ length: 13 }, (_, i) => colorForIndex(i))).toEqual([...APPROVED.map(([id]) => id), 'blue'])
+    expect(Array.from({ length: 16 }, (_, i) => colorForIndex(i))).toEqual([...APPROVED.map(([id]) => id), 'blue'])
   })
 })
 
 /*
- * Contrast (WCAG 2.x relative luminance). Three locked combinations fall
+ * Contrast (WCAG 2.x relative luminance). Four locked combinations fall
  * below the 4.5:1 normal-text level; they are approved by the owner and
  * reported as a contrast concern rather than corrected. Every pair must still
  * reach 3:1 (graphical objects such as the category icon and check mark, and
@@ -106,6 +127,8 @@ const BELOW_NORMAL_TEXT_AA: Record<string, number> = {
   'Brushed Steel': 3.45,
   Copper: 3.97,
   'Antique Gold': 3.36,
+  // v0.6.1 expansion: approved and locked; reported, not corrected.
+  'Dusty Rose': 3.54,
 }
 
 describe('palette contrast', () => {

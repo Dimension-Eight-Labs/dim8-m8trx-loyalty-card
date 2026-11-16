@@ -14,7 +14,7 @@
  * Contrast (v0.6.1): the icon inherits the surrounding text color, so on
  * every surface that shows a card (wallet tile, card-menu header, checkout
  * band, icon-picker preview) it is exactly the palette's paired text color
- * from tileColors.ts: Soft Silver on the eleven dark colors and Charcoal on
+ * from tileColors.ts: Soft Silver on the fourteen dark colors and Charcoal on
  * Ivory. Every pairing is at least 3:1 (the WCAG graphical-object level), so
  * no outline is needed. v0.6.0's white strokes with a dark
  * "halo" under-stroke on light tiles were removed after iPhone testing.
@@ -94,6 +94,20 @@ const ARTWORK: Record<CardIconId, ReactNode> = {
     <>
       <path d="M4 7h16a1 1 0 0 1 1 1v2a2 2 0 0 0 0 4v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a2 2 0 0 0 0-4V8a1 1 0 0 1 1-1Z" />
       <path d="M15 7.5v1.5M15 11.25v1.5M15 15v1.5" />
+    </>
+  ),
+  // Gear (v0.6.1): machinery, manufacturing, engineering and industrial
+  // equipment. A conventional symmetrical cog centred on (12, 12): eight
+  // evenly spaced teeth (one every 45°) whose tips lie on r = 10 (±7.5° of
+  // arc) and whose flanks drop to a root circle of r = 7.25 (±10.5°), around
+  // a circular opening of r = 3. The coordinates were computed from those
+  // parameters and rounded to 0.01. Eight teeth with near-parallel flanks
+  // keep a visible gap between teeth at tile and picker sizes; more teeth
+  // would close the gaps at stroke width 2.
+  gear: (
+    <>
+      <path d="M10.68 4.87L10.69 2.09A10 10 0 0 1 13.31 2.09L13.32 4.87A7.25 7.25 0 0 1 16.11 6.03L18.09 4.07A10 10 0 0 1 19.93 5.91L17.97 7.89A7.25 7.25 0 0 1 19.13 10.68L21.91 10.69A10 10 0 0 1 21.91 13.31L19.13 13.32A7.25 7.25 0 0 1 17.97 16.11L19.93 18.09A10 10 0 0 1 18.09 19.93L16.11 17.97A7.25 7.25 0 0 1 13.32 19.13L13.31 21.91A10 10 0 0 1 10.69 21.91L10.68 19.13A7.25 7.25 0 0 1 7.89 17.97L5.91 19.93A10 10 0 0 1 4.07 18.09L6.03 16.11A7.25 7.25 0 0 1 4.87 13.32L2.09 13.31A10 10 0 0 1 2.09 10.69L4.87 10.68A7.25 7.25 0 0 1 6.03 7.89L4.07 5.91A10 10 0 0 1 5.91 4.07L7.89 6.03A7.25 7.25 0 0 1 10.68 4.87Z" />
+      <circle cx="12" cy="12" r="3" />
     </>
   ),
 }
