@@ -37,7 +37,7 @@ GPLv2). No bundled component is under a copyleft or non-commercial licence.
 ## Development and build tools (not bundled)
 
 Build, test and lint tools from `package-lock.json` (Vite, Vitest, ESLint,
-TypeScript, jsdom, Workbox and their dependencies) run only on the
+TypeScript, jsdom, Workbox, Playwright and their dependencies) run only on the
 developer's machine. Their licences are MIT, ISC, Apache-2.0, BSD-2-Clause,
 BSD-3-Clause, 0BSD, BlueOak-1.0.0, MPL-2.0 (`lightningcss`), CC-BY-4.0
 (`caniuse-lite` browser data) and permissive dual licences such as

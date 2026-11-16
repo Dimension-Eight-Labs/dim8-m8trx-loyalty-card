@@ -154,8 +154,10 @@ describe('picker selection state (v0.6.1 consistency pass)', () => {
   })
 
   it('keeps the swatch geometry identical for every option', () => {
+    // Width-driven square (v0.6.1 narrow-screen correction): no min-height,
+    // which used to override the aspect ratio in narrow columns.
     expect(normalized('.icon-picker__swatch')).toBe(
-      'position: relative; display: grid; place-items: center; width: 100%; min-height: var(--touch-target); aspect-ratio: 1; max-width: 3.5rem; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18)',
+      'position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1; max-width: 3.5rem; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18)',
     )
     // Since the industrial palette (v0.6.1) colour options carry a visible
     // name under the swatch, so the colour swatch matches the icon swatch.
@@ -283,31 +285,74 @@ describe('checkout card bands (v0.6.1)', () => {
 })
 
 /*
- * Picker grids (v0.6.1 final palette expansion): both pickers use exactly
- * five columns, so fifteen colours form three complete rows and None plus
- * nine categories form two. minmax(0, 1fr) lets columns shrink on narrow
- * phones; the swatch keeps its own touch-target minimum and size cap.
+ * Picker grids (v0.6.1 final palette expansion, narrow-screen correction):
+ * both pickers default to five columns, so fifteen colours form three
+ * complete rows and None plus nine categories form two. Below 19rem (304px)
+ * of picker width — the larger of the 48px-swatch minimum (272px) and the
+ * whole-word label minimum (~304px) — a container query on the picker
+ * fieldset switches to four columns. These are stylesheet contracts only;
+ * tests/picker-layout.spec.ts (npm run test:layout) measures the rendered
+ * geometry in Chromium at 320–390px.
  */
-describe('five-column pickers (v0.6.1 final palette expansion)', () => {
-  it.each(['.color-picker__swatches', '.icon-picker__options'])('%s is a fixed five-column grid with the existing gap', (selector) => {
+describe('responsive picker grids (v0.6.1 narrow-screen correction)', () => {
+  const uncommented = css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  it.each(['.color-picker__swatches', '.icon-picker__options'])('%s defaults to five columns with the existing gap', (selector) => {
     expect(normalized(selector)).toBe('display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-2)')
   })
 
-  it('lets picker labels use half a gap on each side, never more (no overlap with neighbours)', () => {
-    for (const selector of ['.color-picker__label', '.icon-picker__label']) {
-      expect(rule(selector), selector).toMatch(/max-width:\s*calc\(100% \+ var\(--space-2\)\);/)
-    }
-    // The option centres its label, so the overflow is split evenly across both gaps.
-    for (const selector of ['.color-picker__option', '.icon-picker__option']) expect(rule(selector)).toMatch(/align-items:\s*center;/)
-    expect(rule('.color-picker__label')).toMatch(/overflow-wrap:\s*break-word;/)
+  it.each(['.color-picker', '.icon-picker'])('%s fieldset is a shrinkable inline-size container named picker', (selector) => {
+    const body = rule(selector)
+    expect(body).toMatch(/container:\s*picker \/ inline-size;/)
+    // Fieldsets default to min-inline-size: min-content, which would stop the
+    // container shrinking to the available width.
+    expect(body).toMatch(/min-inline-size:\s*0;/)
   })
 
-  it('keeps the swatch touch-target minimum and size cap', () => {
+  it('falls back to four columns below 19rem of picker width, for both pickers and nothing else', () => {
+    const queries = Array.from(uncommented.matchAll(/@container\s+([^{]+)\{([\s\S]*?\})\s*\}/g), (m) => [m[1]!.trim(), m[2]!] as const)
+    expect(queries).toHaveLength(1)
+    const [condition, body] = queries[0]!
+    expect(condition).toBe('picker (width < 19rem)')
+    const normalizedBody = body.replace(/\s+/g, ' ').trim()
+    expect(normalizedBody).toBe('.color-picker__swatches, .icon-picker__options { grid-template-columns: repeat(4, minmax(0, 1fr)); }')
+    // No viewport media query and no gap change drive the picker columns.
+    const mediaBlocks = Array.from(uncommented.matchAll(/@media[^{]*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g), (m) => m[1]!)
+    expect(mediaBlocks.length).toBeGreaterThan(0)
+    for (const block of mediaBlocks) expect(block).not.toMatch(/color-picker|icon-picker/)
+  })
+
+  it('derives the 19rem breakpoint from the swatch and label requirements', () => {
+    const swatchMinimum = 5 * 48 + 4 * 8 // five 48px swatches + four 8px gaps
+    const longestWord = 62.5 // selected "Hardware", 13px semibold, measured in Chromium
+    const labelMinimum = 5 * (longestWord - 8) + 4 * 8 // column + one gap holds the word
+    expect(swatchMinimum).toBe(272)
+    expect(Math.ceil(Math.max(swatchMinimum, labelMinimum))).toBeLessThanOrEqual(19 * 16 + 1)
+    // The approved 390px layouts stay five columns: form 358px, dialog 308px.
+    expect(390 - 2 * 16).toBeGreaterThanOrEqual(19 * 16)
+    expect(390 - 2 * 16 - 2 * 24 - 2).toBeGreaterThanOrEqual(19 * 16)
+  })
+
+  it('keeps square swatches with the 3.5rem cap and no height minimum', () => {
     for (const selector of ['.color-picker__swatch', '.icon-picker__swatch']) {
-      expect(rule(selector), selector).toMatch(/min-height:\s*var\(--touch-target\);/)
-      expect(rule(selector), selector).toMatch(/max-width:\s*3\.5rem;/)
-      expect(rule(selector), selector).toMatch(/aspect-ratio:\s*1;/)
+      const body = rule(selector)
+      expect(body, selector).toMatch(/width:\s*100%;/)
+      expect(body, selector).toMatch(/aspect-ratio:\s*1;/)
+      expect(body, selector).toMatch(/max-width:\s*3\.5rem;/)
+      expect(body.replace(/\/\*[\s\S]*?\*\//g, ''), selector).not.toMatch(/min-height|(^|[\s;])height:/)
     }
+  })
+
+  it('lets picker labels use half a gap on each side and wrap at spaces, never truncating or splitting words', () => {
+    for (const selector of ['.color-picker__label', '.icon-picker__label']) {
+      const body = rule(selector).replace(/\/\*[\s\S]*?\*\//g, '')
+      expect(body, selector).toMatch(/max-width:\s*calc\(100% \+ var\(--space-2\)\);/)
+      expect(body, selector).toMatch(/min-width:\s*min-content;/)
+      expect(body, selector).toMatch(/text-align:\s*center;/)
+      expect(body, selector).not.toMatch(/ellipsis|nowrap|overflow:|overflow-wrap|word-break|hyphens|line-clamp|display:\s*none|clip|opacity/)
+    }
+    // The option centres its label, so any overflow is split evenly across both gaps.
+    for (const selector of ['.color-picker__option', '.icon-picker__option']) expect(rule(selector)).toMatch(/align-items:\s*center;/)
   })
 })
 

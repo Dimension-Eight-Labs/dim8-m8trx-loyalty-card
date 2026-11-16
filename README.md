@@ -136,6 +136,20 @@ backup-format change.
 - **Five-column pickers.** The color picker shows three complete rows of
   five and the icon picker two complete rows of five; swatch size, gaps,
   labels, check marks and radio behavior are unchanged.
+- **Narrow-screen pickers (correction).** Supported viewports are 320 CSS
+  px and wider. At 320px the five-column grid inside the ⋯ menu dialog had
+  squeezed swatches to 41.2 × 48px and cut the Hardware label to "Hard…".
+  Both pickers now switch to four columns when the picker itself is
+  narrower than 19rem (304px). That width is the larger of what five square
+  48px swatches need (272px) and what the longest single label words
+  ("Gunmetal", "Burgundy", selected "Hardware") need to stay whole. The
+  switch is a CSS container query on the picker, not a viewport or
+  JavaScript check, so at a given phone width the Add Card form can keep
+  five columns while the narrower dialog uses four. Swatches are always
+  square (no height minimum overriding the aspect ratio), labels wrap at
+  spaces and are never clipped, ellipsized or split mid-word, and gaps,
+  check marks and radio behavior are unchanged. The approved 390px (iPhone
+  13) layout is unchanged: five columns in both the form and the dialog.
 - **Flat card surfaces.** The leftover white sheen gradient was removed from
   the wallet tile, the ⋯ menu's colored header and the checkout card's upper
   band, so all three show the exact flat palette color.
@@ -735,6 +749,7 @@ Timestamps are kept internally but never shown.
 | `npm run dev`       | Start the dev server (service worker disabled).                |
 | `npm test`          | Run the unit, component, and persistence tests once (Vitest).  |
 | `npm run test:watch`| Run the tests in watch mode.                                   |
+| `npm run test:layout` | Build, serve the production build and measure the rendered Color/Icon picker layout at phone widths in Chromium (Playwright; see [Testing](#testing)). |
 | `npm run lint`      | Run ESLint.                                                    |
 | `npm run typecheck` | Type-check the app and config with `tsc -b`.                   |
 | `npm run build`     | Type-check, then build to `dist/` with the manifest and service worker. |
@@ -891,7 +906,8 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
   on the tile, card-menu header, checkout band and icon preview (the global
   heading color cannot override them); the nut-and-bolt Hardware artwork;
   the Gear artwork and hash-pinned markup of the other seven original
-  icons; five-column picker grids (15 colors, 10 icon choices); no
+  icons; responsive picker grids (five columns, four below 19rem of
+  picker width; 15 colors, 10 icon choices); no
   gradient, image, filter or blend layer on any card-surface rule;
   icon-picker check marks (None included) with radio semantics and arrow
   keys; selected-state CSS that changes no size, ring or border; menu
@@ -910,17 +926,58 @@ Dependencies added in v0.3.0 (all MIT/Apache-2.0, bundled locally):
 
 These do not prove behaviour on a phone. See the checklist below.
 
+`npm run test:layout` runs rendered-layout tests in a real browser
+(Playwright, Chromium; `tests/picker-layout.spec.ts`), because jsdom cannot
+lay out CSS. It builds the app, serves it with `vite preview` under the
+GitHub Pages base path on port 4174, and measures the Color and Icon
+pickers in both the Add Card form and the ⋯ menu dialog at 320, 340, 360,
+375 and 390 CSS px (plus 385/386px either side of the dialog's column
+breakpoint). For each picker it checks:
+
+- swatches are square, at least 48px, all the same size, selected or not;
+- the column count matches the picker's measured width;
+- the page does not scroll horizontally;
+- every label is complete, unclipped, has no word split across lines, is
+  centred and does not overlap its neighbours;
+- the check mark sits inside and aligned to its swatch;
+- tapping an option moves both the radio selection and the check mark;
+- all 15 colors and 10 icon choices are present with complete accessible
+  names;
+- at 390px, the approved five-column geometry is unchanged.
+
+Each run prints one `[picker-layout]` JSON line per picker with the
+measurements. First-time setup: `npx playwright install chromium`, or set
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE` to an installed Chromium-based browser
+(for example `/usr/bin/brave-browser`). This is desktop Chromium with the
+host's fonts, not Mobile Safari or Samsung Internet. Physical-device checks
+below are still required.
+
 ### Real-device checklist (not verifiable in host tests)
+
+**v0.6.1 physical-device acceptance (narrow-screen pickers).** Not yet
+performed; automated Chromium measurements do not replace these. Record
+results per device.
+
+1. On an iPhone 13 (390px): Add Card and ⋯ → Change color / Change icon
+   look exactly as approved (five columns, same swatch size and labels).
+2. On the narrowest available iPhone (375px or 320px class) and a Samsung
+   or other Android phone (360px class): ⋯ → Change color and Change icon
+   show four columns of square swatches, every name complete (Hardware,
+   Brushed Steel, Obsidian Black, Petrol Teal), no sideways scrolling, and
+   every option easy to tap with the check mark correctly placed.
+3. On the same phones, Add Card shows five columns where the screen allows
+   it (four at 320px), with the same checks as item 2.
 
 **v0.6.1 physical-iPhone acceptance (final palette expansion).** None of
 these have been performed yet; record results per item.
 
-1. Add Card and ⋯ → Change color show three complete rows of five colors,
+1. Add Card and ⋯ → Change color show all fifteen colors in complete rows
+   of five (four on narrow screens; see the narrow-screen checklist above),
    ending with Petrol Teal, Olive and Dusty Rose; every name is readable
    and every swatch easy to tap on the narrowest supported iPhone.
-2. Add Card and ⋯ → Change icon show two complete rows of five icon choices
-   (None … Events, Gear); labels are readable and Gear reads as a gear at
-   tile and picker size.
+2. Add Card and ⋯ → Change icon show all ten icon choices in two complete
+   rows of five (four columns on narrow screens: None … Events, Gear);
+   labels are readable and Gear reads as a gear at tile and picker size.
 3. Tiles, the ⋯ menu header and the checkout upper band look flat (no
    lighter upper-left sheen) on every color, including the three new ones.
 4. Card names and icons on Dusty Rose remain acceptably legible (3.54:1).

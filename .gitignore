@@ -28,3 +28,7 @@ dev-dist/
 # Python bytecode from the scripts/ utilities
 __pycache__/
 *.pyc
+
+# Playwright layout-test output
+test-results/
+playwright-report/

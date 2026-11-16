@@ -857,11 +857,19 @@
  * palette names such as "Brushed Steel" vs "Gunmetal" are not self-evident
  * from the swatch alone). Names may wrap to two lines rather than truncate.
  * Swatches are flat solid fills: no gradients, highlights or textures.
+ *
+ * Narrow-screen fallback (v0.6.1 correction): see "Picker column fallback"
+ * after the icon picker. Both picker fieldsets are inline-size containers so
+ * the grid can switch to four columns from the picker's own width.
  */
 .color-picker {
   margin: 0;
   padding: 0;
   border: 0;
+  /* A fieldset defaults to min-inline-size: min-content; 0 lets it take the
+   * available width instead of growing to its content. */
+  min-inline-size: 0;
+  container: picker / inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -869,9 +877,10 @@
 
 .color-picker__swatches {
   display: grid;
-  /* Exactly five columns: the fifteen palette colours form three complete
-   * rows. minmax(0, 1fr) lets columns shrink on narrow phones (the swatch
-   * keeps its 3rem touch-target minimum and 3.5rem cap; labels wrap). */
+  /* Five columns by default: the fifteen palette colours form three complete
+   * rows. minmax(0, 1fr) lets columns shrink with the picker; below the
+   * width where five 48px swatches and whole-word labels fit, the container
+   * query further down switches to four columns. */
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-2);
 }
@@ -886,12 +895,17 @@
   cursor: pointer;
 }
 
+/* Width drives height through aspect-ratio, so the swatch is always square:
+ * the full column width up to the 3.5rem cap. There is deliberately no
+ * min-height: when a column was narrower than 3rem, a height minimum
+ * overrode the aspect ratio and produced 41.2 × 48px cells at 320px. The
+ * 3rem (48px) touch target is kept instead by the column fallback, which
+ * never lets a column drop below 48px at supported widths (>= 320px). */
 .color-picker__swatch {
   position: relative;
   display: grid;
   place-items: center;
   width: 100%;
-  min-height: var(--touch-target);
   aspect-ratio: 1;
   max-width: 3.5rem;
   border-radius: var(--radius-md);
@@ -908,19 +922,23 @@
 }
 
 .color-picker__label {
-  /* May extend half a grid gap past each side of its column (labels are
-   * centred, so neighbours can never overlap): in the five-column grid this
-   * keeps single words such as "Burgundy" whole at common iPhone widths.
-   * A word still wider than that is hyphenated (html lang="en"), falling
-   * back to overflow-wrap, rather than overflowing into its neighbour. */
+  /* Width: up to half a grid gap past each side of its column (labels are
+   * centred under the swatch), so multi-word names wrap at spaces beneath
+   * the swatch. Words are never split (v0.6.1 correction): mid-word breaks
+   * such as "Hardwar|e" (overflow-wrap without a hyphenation dictionary)
+   * hurt legibility, so min-width: min-content lets a single word wider
+   * than that allowance keep its full width, still centred, overhanging
+   * evenly into the gaps. This is only a safety net for wider fonts: the
+   * column fallback is sized so that, in the measured layouts (320–390px),
+   * no word exceeds its allowance by more than about a pixel, and the
+   * rendered-layout tests check that no two labels overlap. At 390px no
+   * word reaches the allowance, so the approved layout is unchanged. */
+  min-width: min-content;
   max-width: calc(100% + var(--space-2));
   font-size: var(--font-size-xs);
   line-height: 1.2;
   color: var(--color-text-muted);
   text-align: center;
-  -webkit-hyphens: auto;
-  hyphens: auto;
-  overflow-wrap: break-word;
 }
 
 .color-picker__option:has(:focus-visible) .color-picker__swatch {
@@ -951,6 +969,9 @@
   margin: 0;
   padding: 0;
   border: 0;
+  /* Same container setup as .color-picker. */
+  min-inline-size: 0;
+  container: picker / inline-size;
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -958,8 +979,8 @@
 
 .icon-picker__options {
   display: grid;
-  /* Exactly five columns: None plus nine categories form two complete rows.
-   * Same column rule as the colour picker. */
+  /* Five columns by default: None plus nine categories form two complete
+   * rows. Same column rule and narrow fallback as the colour picker. */
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-2);
 }
@@ -982,12 +1003,12 @@
   cursor: pointer;
 }
 
+/* Square by aspect-ratio with no height minimum; see .color-picker__swatch. */
 .icon-picker__swatch {
   position: relative;
   display: grid;
   place-items: center;
   width: 100%;
-  min-height: var(--touch-target);
   aspect-ratio: 1;
   max-width: 3.5rem;
   border-radius: var(--radius-md);
@@ -1000,14 +1021,16 @@
 }
 
 .icon-picker__label {
-  /* Same half-gap allowance as .color-picker__label, so "Hardware" stays
-   * whole in the five-column grid; narrower columns still ellipsize. */
+  /* Same sizing and wrapping rules as .color-picker__label. Never clipped
+   * or ellipsized (v0.6.1 correction: "Hardware" showed as "Hard…" at
+   * 320px); a whole word is kept intact, centred under its swatch, and the
+   * selected label's heavier weight only widens it rather than wrapping it.
+   * line-height is left inherited so labels keep their approved height. */
+  min-width: min-content;
   max-width: calc(100% + var(--space-2));
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: center;
 }
 
 .icon-picker__option:has(:focus-visible) .icon-picker__swatch {
@@ -1056,6 +1079,39 @@
 .icon-picker__option:has(:checked) .icon-picker__label {
   color: var(--color-text);
   font-weight: 600;
+}
+
+/* ---- Picker column fallback (v0.6.1 narrow-screen correction) --------------
+ * Both pickers default to five columns (the approved layout). Below 19rem
+ * (304px) of picker width they switch to four. The breakpoint is the larger
+ * of two requirements, both scaling with the rem-based tokens:
+ * - Square 48px swatches: 5 × 3rem + 4 × 0.5rem gaps = 17rem (272px).
+ * - Whole-word labels: a label may use its column plus one gap (see
+ *   .color-picker__label). The longest single words, "Gunmetal",
+ *   "Burgundy" and the selected (semibold) "Hardware", measure about 60–63px
+ *   at the 13px label size in Chromium (Noto Sans). A column of ~54.5px is
+ *   therefore needed: 5 × 54.5 + 4 × 8 ≈ 304px = 19rem. Narrower five-column
+ *   grids (measured at 272–293px) forced those words to split mid-word or
+ *   collide with a neighbour.
+ * Four columns at the narrowest supported picker (238px, the dialog at a
+ * 320px viewport) give 53.5px swatches and a 61.5px label allowance.
+ *
+ * The query reads the picker's own content width (the fieldset is the
+ * "picker" container), not the viewport: the same picker sits in the Add
+ * Card form (viewport − 32px) and the card-menu dialog (viewport − 82px).
+ * At 390px (iPhone 13) both are wider than 19rem (358px and 308px), so the
+ * approved five-column layout is unchanged there. Gap, swatch cap and label
+ * styling do not change between the two layouts.
+ *
+ * Browsers without container queries (before Safari 16 / Chrome 105) keep
+ * five columns; their swatches stay square but may be smaller than 48px in
+ * the dialog at the narrowest widths.
+ */
+@container picker (width < 19rem) {
+  .color-picker__swatches,
+  .icon-picker__options {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 /* ---- Checkout ------------------------------------------------------------

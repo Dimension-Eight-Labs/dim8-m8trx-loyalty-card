@@ -41,7 +41,7 @@
  * to the app (see src/app/appMetadata.ts).
  */
 import { readFileSync } from 'node:fs'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { createPwaManifest, GITHUB_PAGES_BASE } from './src/app/pwaManifest.ts'
@@ -85,6 +85,9 @@ export default defineConfig(({ mode }) => {
       globals: true,
       setupFiles: ['./src/test/setup.ts'],
       css: false,
+      // tests/ holds the Playwright rendered-layout specs (npm run test:layout),
+      // which need a real browser and must not run under jsdom.
+      exclude: [...configDefaults.exclude, 'tests/**'],
     },
   }
 })

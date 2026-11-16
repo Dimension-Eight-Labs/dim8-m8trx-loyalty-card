@@ -1,0 +1,16 @@
+/*
+ * Type-checks the Playwright rendered-layout tests (tests/, run with
+ * `npm run test:layout`) and their config. They run in Node but pass
+ * callbacks to the browser (page.evaluate), so both Node types and the DOM
+ * library are needed. Kept apart from tsconfig.app.json so application code
+ * never type-checks against Node globals.
+ */
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.layout.tsbuildinfo",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["playwright.config.ts", "tests"]
+}
