@@ -8,6 +8,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LoyaltyCard, NewCardInput } from '../features/cards/card.ts'
 import { CardNotFoundError, CardValidationError } from '../features/cards/CardRepository.ts'
+import { TILE_COLORS } from '../features/cards/tileColors.ts'
 import { createIndexedDbCardRepository, DEFAULT_DB_NAME, type IndexedDbCardRepositoryOptions } from './indexedDbCardRepository.ts'
 
 // Node's own Blob (structured-cloneable, unlike jsdom's). Loaded by a
@@ -606,5 +607,21 @@ describe('category icons (v0.6.0)', () => {
     // An unrelated edit leaves the unrecognized stored value alone.
     await reopened.update('future-icon', { storeName: 'Edited' })
     expect((await readRawCard('future-icon'))?.icon).toBe('spaceship')
+  })
+})
+
+describe('palette color identifiers (industrial palette, v0.6.1)', () => {
+  // The palette change kept every stored id, so no database migration exists:
+  // records written with any id are read back unchanged after a reopen.
+  it('keeps every palette id, the cards and their order across a repository reopen', async () => {
+    const repo = makeRepository()
+    for (const [i, color] of TILE_COLORS.entries()) {
+      await repo.create({ storeName: `Shop ${i}`, color: color.id, barcode: { kind: 'text', value: `T${i}` } })
+    }
+    const before = await repo.list()
+    repo.close()
+    const after = await makeRepository().list()
+    expect(after).toEqual(before)
+    expect(after.map((c) => c.color)).toEqual(TILE_COLORS.map((c) => c.id))
   })
 })

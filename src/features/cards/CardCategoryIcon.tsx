@@ -14,9 +14,9 @@
  * Contrast (v0.6.1): the icon inherits the surrounding text color, so on
  * every surface that shows a card (wallet tile, card-menu header, checkout
  * band, icon-picker preview) it is exactly the palette's paired text color
- * from tileColors.ts: charcoal on the light colors (Orange, Yellow, White)
- * and white on the dark ones. That pairing is already chosen for at least
- * 4.5:1 contrast, so no outline is needed. v0.6.0's white strokes with a dark
+ * from tileColors.ts: Soft Silver on the eleven dark colors and Charcoal on
+ * Ivory. Every pairing is at least 3:1 (the WCAG graphical-object level), so
+ * no outline is needed. v0.6.0's white strokes with a dark
  * "halo" under-stroke on light tiles were removed after iPhone testing.
  *
  * Decorative: the SVG is aria-hidden. The tile is named by the card name and

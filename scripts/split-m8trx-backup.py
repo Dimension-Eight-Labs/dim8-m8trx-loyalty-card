@@ -94,6 +94,8 @@ BASE64_RE = re.compile(r"[A-Za-z0-9+/]*={0,2}")
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 # Tile colour palette ids (TILE_COLORS in src/features/cards/tileColors.ts).
+# Legacy opaque keys: since app 0.6.1 they name industrial-palette colours
+# (e.g. "blue" is Gunmetal), but the stored strings are unchanged.
 TILE_COLOR_IDS = frozenset(
     ["red", "orange", "yellow", "green", "teal", "blue", "indigo", "purple", "pink", "brown", "slate", "white"]
 )

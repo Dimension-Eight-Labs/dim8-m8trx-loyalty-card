@@ -127,6 +127,21 @@ describe('split-m8trx-backup.py', () => {
     expect((JSON.parse(readPart(parts()[0]!)) as Doc).order.filter((id) => id.startsWith('img-'))).toHaveLength(15)
   }, 120_000)
 
+  it('splits a wallet using every palette color id without altering any card', async () => {
+    const wallet = TILE_COLORS.map((c, i) => card(`p${i}`, `Shop ${i}`, { kind: 'text', value: `T${i}` }, { color: c.id }))
+    const text = await createBackup(wallet, meta)
+    const input = writeBackup(text)
+    expect(runSplit(input, '--max-cards', '5').status).toBe(0)
+    const byId = new Map((JSON.parse(text) as Doc).cards.map((c) => [c.id, c]))
+    const restored: LoyaltyCard[] = []
+    for (const name of parts()) {
+      const partText = readPart(name)
+      for (const record of (JSON.parse(partText) as Doc).cards) expect(record).toEqual(byId.get(record.id))
+      restored.push(...parseBackup(partText))
+    }
+    expect(restored.map((c) => c.color)).toEqual(TILE_COLORS.map((c) => c.id))
+  })
+
   it('restores part by part: appends in import order, skips duplicates, keeps existing cards', async () => {
     const wallet = Array.from({ length: 5 }, (_, i) =>
       card(`c${i}`, `Sample ${i}`, i % 2 ? { kind: 'text', value: `TXT ${i}` } : { kind: 'image', image: image(i, 300) }),

@@ -12,8 +12,8 @@
  *   app.css) with the card centred on it. Since v0.6.1 the card reads as an
  *   enlarged wallet tile: a tall upper band in the card's palette color holds
  *   the optional category icon and the store name (the dialog's label), in
- *   the tile's typography and its palette text/icon color (charcoal on light
- *   colors, white on dark); a white optical-code area; and a lower band in
+ *   the tile's typography and its palette text/icon color (Soft Silver on the
+ *   dark colors, Charcoal on Ivory); a white optical-code area; and a lower band in
  *   the same color. The face shape follows the barcode (see
  *   barcodes/presentation.ts): a card face for linear codes and unknown
  *   images, a taller near-square face for QR / Data Matrix / Aztec (redrawn

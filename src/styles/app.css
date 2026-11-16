@@ -685,8 +685,8 @@
  * `color: inherit` is required, not decorative: base.css gives every h1/h2 the
  * app's light heading color, and a color declared on the element itself beats
  * the palette color inherited from `.card-header`. Without it the name stayed
- * near-white on the light palette colors (Orange, Yellow, White) while the
- * icon beside it, which uses currentColor, was charcoal. Inheriting keeps the
+ * near-white on the light palette colors of the time (Orange, Yellow,
+ * White) while the icon beside it, which uses currentColor, was charcoal. Inheriting keeps the
  * name and icon on the single palette foreground set on the container.
  */
 .card-header__title {
@@ -846,7 +846,14 @@
   color: var(--color-danger);
 }
 
-/* ---- Colour picker -------------------------------------------------------- */
+/* ---- Colour picker (ColorPicker.tsx) --------------------------------------
+ * Same structure as the icon picker below: a grid of options, each an
+ * invisible native radio over the whole option (full touch target), a flat
+ * swatch, and the approved colour name visible underneath (industrial
+ * palette names such as "Brushed Steel" vs "Gunmetal" are not self-evident
+ * from the swatch alone). Names may wrap to two lines rather than truncate.
+ * Swatches are flat solid fills: no gradients, highlights or textures.
+ */
 .color-picker {
   margin: 0;
   padding: 0;
@@ -858,19 +865,30 @@
 
 .color-picker__swatches {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--touch-target), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr));
   gap: var(--space-2);
+}
+
+.color-picker__option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  cursor: pointer;
 }
 
 .color-picker__swatch {
   position: relative;
   display: grid;
   place-items: center;
-  aspect-ratio: 1;
+  width: 100%;
   min-height: var(--touch-target);
+  aspect-ratio: 1;
+  max-width: 3.5rem;
   border-radius: var(--radius-md);
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18);
-  cursor: pointer;
 }
 
 /* The native radio stays focusable and announced, but invisible. */
@@ -882,7 +900,16 @@
   cursor: pointer;
 }
 
-.color-picker__swatch:has(:focus-visible) {
+.color-picker__label {
+  max-width: 100%;
+  font-size: var(--font-size-xs);
+  line-height: 1.2;
+  color: var(--color-text-muted);
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+.color-picker__option:has(:focus-visible) .color-picker__swatch {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }
@@ -891,8 +918,9 @@
  * Selection (v0.6.1 consistency pass): the check mark rendered by
  * ColorPicker is the selected cue, shared with the icon picker. No ring or
  * border change is applied, so a selected swatch is pixel-identical in size
- * and edge to an unselected one; the check takes the palette foreground
- * (currentColor), which meets 4.5:1 on every swatch.
+ * and edge to an unselected one. The check takes the palette foreground
+ * (currentColor: Soft Silver, or Charcoal on Ivory), which is at least 3:1 on
+ * every swatch — the WCAG threshold for graphical objects.
  */
 .color-picker__swatch .button__icon {
   pointer-events: none;
@@ -976,7 +1004,7 @@
  * or moves the artwork. Legibility on all 12 swatch colours: the badge is a
  * disc in the palette foreground (inherited currentColor) with the check in the
  * swatch's own background colour (--swatch-bg, set inline by IconPicker), i.e.
- * the same >= 4.5:1 palette pair inverted. The 2px ring in the swatch
+ * the same palette pair inverted (>= 3:1 on every colour). The 2px ring in the swatch
  * background separates the disc from category artwork it may overlap. For
  * None the swatch is empty, so the badge alone marks the selection.
  */

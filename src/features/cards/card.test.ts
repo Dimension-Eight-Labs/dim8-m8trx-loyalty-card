@@ -46,7 +46,7 @@ describe('card domain', () => {
   })
 
   it('falls back to the default colour for unknown palette ids', () => {
-    expect(tileColor('mystery').id).toBe('blue')
+    expect(tileColor('mystery').label).toBe('Midnight Blue')
     expect(new Set(TILE_COLORS.map((color) => color.id)).size).toBe(TILE_COLORS.length)
   })
 })

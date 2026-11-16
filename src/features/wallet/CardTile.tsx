@@ -2,8 +2,8 @@
  * One wallet tile (redesigned in v0.6.0; shortened to a 3:2 rectangle in
  * v0.6.1): the card's color, an optional category icon in the upper-left
  * corner, and the card name on a single line in a fixed lower band. The icon
- * and name share the palette's text color (charcoal on light colors, white on
- * dark ones; see tileColors.ts), set once on the <li>.
+ * and name share the palette's text color (Soft Silver on the dark colors, Charcoal
+ * on Ivory; see tileColors.ts), set once on the <li>.
  *
  * Layout invariants (see `.tile` in app.css): the icon slot and the name band
  * have fixed positions and sizes whether or not an icon is set, and the name

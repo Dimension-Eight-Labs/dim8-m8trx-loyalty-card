@@ -70,7 +70,7 @@ describe('CardMenu header', () => {
     const { dialog } = await openMenu({ card: makeCard({ icon: 'coffee' }) })
     expect(dialog).toHaveAccessibleName('Corner Coffee')
     const header = within(dialog).getByTestId('card-menu-header')
-    expect(header).toHaveStyle({ background: '#00796b', color: '#ffffff' })
+    expect(header).toHaveStyle({ background: '#727F89', color: '#E8ECEB' }) // teal = Brushed Steel
     expect(within(header).getByRole('heading', { level: 2, name: 'Corner Coffee' })).toBeInTheDocument()
     const icon = header.querySelector('svg[data-icon="coffee"]')
     expect(icon).toHaveAttribute('aria-hidden', 'true')
@@ -82,8 +82,9 @@ describe('CardMenu header', () => {
   })
 
   it.each([
-    ['a light color (Yellow): charcoal', 'yellow', '#fbc02d', '#1a1a1a'],
-    ['a dark color (Purple): white', 'purple', '#7b1fa2', '#ffffff'],
+    ['Ivory: Charcoal', 'white', '#E5E0D1', '#1A1A1A'],
+    ['Antique Gold: Soft Silver', 'yellow', '#9B7B20', '#E8ECEB'],
+    ['Deep Violet: Soft Silver', 'purple', '#51436C', '#E8ECEB'],
   ])('draws the icon in the text color on %s', async (_name, color, background, text) => {
     const { dialog } = await openMenu({ card: makeCard({ color, icon: 'fuel' }) })
     const header = within(dialog).getByTestId('card-menu-header')

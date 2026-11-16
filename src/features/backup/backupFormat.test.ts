@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CardBarcode, LoyaltyCard } from '../cards/card.ts'
 import { CARD_ICON_IDS } from '../cards/cardIcons.ts'
+import { TILE_COLORS, tileColor } from '../cards/tileColors.ts'
 import {
   BACKUP_FORMAT_ID,
   BACKUP_FORMAT_VERSION,
@@ -122,6 +123,29 @@ describe('backup round trip', () => {
 
   it('accepts an empty wallet backup', async () => {
     expect(parseBackup(await createBackup([], meta))).toEqual([])
+  })
+})
+
+describe('palette color identifiers (industrial palette, v0.6.1)', () => {
+  /*
+   * The industrial palette kept the pre-0.6.1 color ids as opaque persistence
+   * keys, so the backup wire format is unchanged: a backup exported before the
+   * palette change carries the same id strings and must restore unmodified.
+   */
+  const LEGACY_IDS = ['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'indigo', 'purple', 'pink', 'brown', 'slate', 'white']
+  const allColors = LEGACY_IDS.map((color, i) => card(`k${i}`, `Shop ${i}`, { kind: 'text', value: `T${i}` }, { color }))
+
+  it('exports each card’s stored legacy id verbatim', async () => {
+    const doc = await backupOf(allColors)
+    expect(doc.cards.map((c) => c.color)).toEqual(LEGACY_IDS)
+  })
+
+  it('restores a backup containing every legacy id, unchanged and in order, onto a valid new palette color', async () => {
+    const restored = parseBackup(await createBackup(allColors, meta))
+    expect(restored.map((c) => [c.id, c.color])).toEqual(allColors.map((c) => [c.id, c.color]))
+    const labels = new Set(TILE_COLORS.map((c) => c.label))
+    for (const c of restored) expect(labels.has(tileColor(c.color).label)).toBe(true)
+    expect(new Set(restored.map((c) => tileColor(c.color).label)).size).toBe(12)
   })
 })
 

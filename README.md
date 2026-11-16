@@ -21,7 +21,7 @@ code at checkout.
 
 - **Wallet home screen**: a grid of short (3:2), colored tiles of identical
   size. Each shows an optional line-art **category icon** (in the tile's text
-  color: charcoal on light colors, white on dark) in the upper-left
+  color: Soft Silver on the dark colors, Charcoal on Ivory) in the upper-left
   corner and the card name on **one line** at the bottom (long names end in
   an ellipsis; the full name is kept, announced to screen readers and shown
   at checkout). No barcode symbol or card number is shown. Tap a tile to open
@@ -109,6 +109,18 @@ backup-format change.
     (including **None**) with the same check mark as the color picker, in a
     small corner badge; both pickers dropped their thick selected ring, so
     selected options keep exactly the same size.
+- **Industrial metallic palette.** The twelve tile colors are now the DIM8
+  industrial metallic set, in this order: Gunmetal, Brushed Steel, Obsidian
+  Black, Copper, Deep Emerald, Midnight Blue, Burgundy, Graphite, Oxblood
+  Red, Antique Gold, Ivory, Deep Violet — flat solid colors, no metallic
+  effects. Card names and icons are Soft Silver (#E8ECEB) on the eleven dark
+  colors and Charcoal (#1A1A1A) on Ivory. The color picker shows each
+  color's name under its swatch. Existing cards and older `.m8trx` backups
+  keep working unchanged: each previous color now shows as its counterpart
+  in the new set (stored color identifiers are unchanged, so there is no
+  database or backup-format change). Contrast note: card names on Brushed
+  Steel (3.45:1), Copper (3.97:1) and Antique Gold (3.36:1) are below the
+  WCAG 4.5:1 level for normal-size text (all colors reach 3:1).
 
 ### v0.6.0 — UI polish and card tile redesign
 

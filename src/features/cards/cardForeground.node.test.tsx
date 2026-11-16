@@ -7,7 +7,9 @@
  * card name and category icon both inherit it. Physical-iPhone testing found
  * the global `h1, h2 { color }` rule in base.css overriding that inherited
  * color on the menu and checkout headings, so the name stayed light on
- * Yellow / White / Orange while the icon beside it was charcoal.
+ * Yellow / White / Orange while the icon beside it was charcoal. Since the
+ * industrial palette the foregrounds are Soft Silver (#E8ECEB) and Charcoal
+ * (#1A1A1A, Ivory only); the same rule and tests apply.
  *
  * Method: the real base.css and app.css are injected into jsdom so its
  * cascade runs (including the global heading rule). jsdom does not evaluate
@@ -28,8 +30,9 @@ import { CardTile } from '../wallet/CardTile.tsx'
 import { CheckoutScreen } from '../checkout/CheckoutScreen.tsx'
 import type { LoyaltyCard } from './card.ts'
 import { CardCategoryIcon } from './CardCategoryIcon.tsx'
+import { ColorPicker } from './ColorPicker.tsx'
 import { IconPicker } from './IconPicker.tsx'
-import { TILE_COLORS } from './tileColors.ts'
+import { CHARCOAL, SOFT_SILVER, TILE_COLORS } from './tileColors.ts'
 
 // ---- Stylesheet with custom properties resolved for jsdom -------------------
 
@@ -114,10 +117,11 @@ function expectSharedForeground(surface: HTMLElement, title: HTMLElement, expect
 // ---- Palette mapping ----------------------------------------------------------
 
 describe('palette foreground', () => {
-  // Global heading color must be different from the charcoal foreground,
-  // otherwise the cascade tests below could not tell the two apart.
+  // Global heading color must be different from both palette foregrounds,
+  // otherwise the cascade tests below could not tell them apart.
   it('differs from the global heading color the cards must not inherit', () => {
-    expect(HEADING_COLOR.toLowerCase()).not.toBe('#1a1a1a')
+    expect(HEADING_COLOR.toLowerCase()).not.toBe(CHARCOAL.toLowerCase())
+    expect(HEADING_COLOR.toLowerCase()).not.toBe(SOFT_SILVER.toLowerCase())
     expect(baseAndApp).toMatch(/h1,\s*h2\s*\{\s*color:/)
   })
 })
@@ -169,6 +173,19 @@ describe.each(TILE_COLORS.map((c) => [c.label, c] as const))('%s card', (_label,
     const swatch = screen.getByRole('radio', { name: 'Hardware' }).parentElement!.querySelector<HTMLElement>('.icon-picker__swatch')!
     expect(color(swatch)).toBe(rgb(palette.text))
     expect(color(swatch.querySelector('svg[data-icon="hardware"]')!)).toBe(rgb(palette.text))
+  })
+
+  it('color picker: the swatch is the flat palette background and the check uses the palette foreground', () => {
+    installStyles(palette.text)
+    render(<ColorPicker name="c" value={palette.id} onChange={() => {}} />)
+    const radio = screen.getByRole('radio', { name: palette.label })
+    expect(radio).toBeChecked()
+    const swatch = radio.parentElement!.querySelector<HTMLElement>('.color-picker__swatch')!
+    expect(getComputedStyle(swatch).backgroundColor).toBe(rgb(palette.background))
+    // Flat solid fill: no gradient or texture layer.
+    expect(swatch.style.backgroundImage).toBe('none')
+    expect(color(swatch)).toBe(rgb(palette.text))
+    expect(color(swatch.querySelector('svg')!)).toBe(rgb(palette.text))
   })
 })
 
@@ -226,10 +243,10 @@ describe('icon picker selection', () => {
   })
 
   it('sets the swatch background as --swatch-bg so the check badge inverts the palette pair', () => {
-    render(<IconPicker name="t" value="fuel" color="yellow" onChange={() => {}} />)
+    render(<IconPicker name="t" value="fuel" color="white" onChange={() => {}} />)
     const swatch = swatchOf('Fuel')
-    expect(swatch.style.getPropertyValue('--swatch-bg')).toBe('#fbc02d')
-    expect(swatch).toHaveStyle({ color: '#1a1a1a' })
+    expect(swatch.style.getPropertyValue('--swatch-bg')).toBe('#E5E0D1')
+    expect(swatch).toHaveStyle({ color: '#1A1A1A' })
   })
 
   it('keeps native radio semantics and arrow-key selection', async () => {
@@ -243,5 +260,71 @@ describe('icon picker selection', () => {
     fitness.focus()
     await user.keyboard('{ArrowRight}')
     expect(onChange).toHaveBeenLastCalledWith('grocery')
+  })
+})
+
+// ---- Color-picker selection ---------------------------------------------------------
+
+describe('color picker (industrial palette)', () => {
+  const optionOf = (label: string) => screen.getByRole('radio', { name: label }).closest('label')!
+
+  it('shows the twelve approved names, in approved order, as native radios named by those names', () => {
+    render(<ColorPicker name="c" value="blue" onChange={() => {}} />)
+    expect(screen.getByRole('group', { name: 'Tile color' })).toBeInTheDocument()
+    const radios = screen.getAllByRole('radio')
+    expect(radios).toHaveLength(12)
+    expect(radios.map((radio) => radio.getAttribute('aria-label'))).toEqual(TILE_COLORS.map((c) => c.label))
+    expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(TILE_COLORS.map((c) => c.id))
+    for (const radio of radios) {
+      expect(radio).toHaveAttribute('type', 'radio')
+      expect(radio).toHaveAttribute('name', 'c')
+    }
+    // The visible names match exactly (no obsolete colours remain).
+    expect(Array.from(document.querySelectorAll('.color-picker__label'), (node) => node.textContent)).toEqual([
+      'Gunmetal',
+      'Brushed Steel',
+      'Obsidian Black',
+      'Copper',
+      'Deep Emerald',
+      'Midnight Blue',
+      'Burgundy',
+      'Graphite',
+      'Oxblood Red',
+      'Antique Gold',
+      'Ivory',
+      'Deep Violet',
+    ])
+  })
+
+  it('checks exactly the selected colour and draws one check mark, on that swatch only', () => {
+    render(<ColorPicker name="c" value="white" onChange={() => {}} />)
+    expect(screen.getByRole('radio', { name: 'Ivory' })).toBeChecked()
+    expect(screen.getAllByRole('radio').filter((radio) => (radio as HTMLInputElement).checked)).toHaveLength(1)
+    const swatches = screen.getAllByTestId('color-picker-swatch')
+    expect(swatches.filter((swatch) => swatch.querySelector('svg'))).toEqual([optionOf('Ivory').querySelector('.color-picker__swatch')])
+  })
+
+  it('gives selected and unselected swatches the same classes and inline styles (identical cell geometry)', () => {
+    render(<ColorPicker name="c" value="teal" onChange={() => {}} />)
+    const selected = optionOf('Brushed Steel').querySelector<HTMLElement>('.color-picker__swatch')!
+    const unselected = optionOf('Gunmetal').querySelector<HTMLElement>('.color-picker__swatch')!
+    expect(selected.className).toBe(unselected.className)
+    // Only the palette colours differ inline; no border, ring or size is set.
+    const keys = (el: HTMLElement) => Array.from(el.style).sort()
+    expect(keys(selected)).toEqual(keys(unselected))
+    expect(keys(selected).filter((k) => /^(width|height|min-|max-|border|outline|box-shadow|padding|margin)/.test(k))).toEqual([])
+    expect(selected.style.backgroundImage).toBe('none')
+  })
+
+  it('selects by click and by arrow keys', async () => {
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(<ColorPicker name="c" value="blue" onChange={onChange} />)
+    await user.click(screen.getByText('Antique Gold'))
+    expect(onChange).toHaveBeenLastCalledWith('yellow')
+    const gunmetal = screen.getByRole('radio', { name: 'Gunmetal' })
+    gunmetal.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(onChange).toHaveBeenLastCalledWith('teal')
   })
 })

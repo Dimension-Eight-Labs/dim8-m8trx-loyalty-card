@@ -157,9 +157,19 @@ describe('picker selection state (v0.6.1 consistency pass)', () => {
     expect(normalized('.icon-picker__swatch')).toBe(
       'position: relative; display: grid; place-items: center; width: 100%; min-height: var(--touch-target); aspect-ratio: 1; max-width: 3.5rem; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18)',
     )
-    expect(normalized('.color-picker__swatch')).toBe(
-      'position: relative; display: grid; place-items: center; aspect-ratio: 1; min-height: var(--touch-target); border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18); cursor: pointer',
-    )
+    // Since the industrial palette (v0.6.1) colour options carry a visible
+    // name under the swatch, so the colour swatch matches the icon swatch.
+    expect(normalized('.color-picker__swatch')).toBe(normalized('.icon-picker__swatch'))
+  })
+
+  it('keeps the whole colour option a touch target with its name visible, and the swatches flat', () => {
+    expect(rule('.color-picker__option')).toMatch(/position:\s*relative;/)
+    expect(rule('.color-picker__input')).toMatch(/position:\s*absolute;\s*inset:\s*0;/)
+    expect(rule('.color-picker__label')).not.toMatch(/display:\s*none|clip|opacity/)
+    expect(rule('.color-picker__option:has(:focus-visible) .color-picker__swatch')).toMatch(/outline:\s*3px solid var\(--color-focus\);/)
+    for (const selector of ['.color-picker__swatch', '.color-picker__option']) {
+      expect(rule(selector)).not.toMatch(/gradient|filter|background-image|text-shadow/)
+    }
   })
 })
 

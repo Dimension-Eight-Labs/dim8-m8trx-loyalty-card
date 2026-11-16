@@ -165,10 +165,10 @@ describe('App', () => {
   it('adds a card manually and shows it as a tile with only its name', async () => {
     const { user } = renderApp()
 
-    await addManualCard(user, 'Corner Coffee', '0012 3456', 'Code 128', 'Green')
+    await addManualCard(user, 'Corner Coffee', '0012 3456', 'Code 128', 'Deep Emerald')
 
     const tile = screen.getByRole('button', { name: 'Corner Coffee' })
-    expect(tile.closest('li')).toHaveStyle({ background: '#2e7d32' })
+    expect(tile.closest('li')).toHaveStyle({ background: '#235C52' })
     // The home screen shows no card number.
     expect(screen.queryByText('0012 3456')).not.toBeInTheDocument()
     expect(screen.getByText('Card saved.')).toBeInTheDocument()
@@ -176,8 +176,8 @@ describe('App', () => {
 
   it('shows tiles without a barcode symbol: just the one-line name and an empty icon slot by default', async () => {
     const { user } = renderApp()
-    await addManualCard(user, 'Bar Shop', '0012', 'Code 128', 'Red')
-    await addManualCard(user, 'QR Shop', 'MEMBER 1', 'QR code', 'White')
+    await addManualCard(user, 'Bar Shop', '0012', 'Code 128', 'Oxblood Red')
+    await addManualCard(user, 'QR Shop', 'MEMBER 1', 'QR code', 'Ivory')
 
     const barTile = screen.getByRole('button', { name: 'Bar Shop' })
     const qrTile = screen.getByRole('button', { name: 'QR Shop' })
@@ -188,7 +188,7 @@ describe('App', () => {
       // The icon slot is still present so every tile has the same layout.
       expect(within(tile).getByTestId('tile-icon-slot')).toBeEmptyDOMElement()
     }
-    expect(qrTile.closest('li')).toHaveStyle({ background: '#eceff1' })
+    expect(qrTile.closest('li')).toHaveStyle({ background: '#E5E0D1' })
     // Still no card data on the home screen.
     expect(screen.queryByText('0012')).not.toBeInTheDocument()
     expect(screen.queryByText('MEMBER 1')).not.toBeInTheDocument()
@@ -590,7 +590,7 @@ describe('App', () => {
 
   it('shows M8TRX at the top, the name in the card’s upper band, and pagination below the stage', async () => {
     const { user } = renderApp()
-    await addManualCard(user, 'Corner Coffee', '0012', 'Code 128', 'Green')
+    await addManualCard(user, 'Corner Coffee', '0012', 'Code 128', 'Deep Emerald')
     await addManualCard(user, 'Second', '2')
     await user.click(screen.getByRole('button', { name: 'Corner Coffee' }))
 
@@ -627,8 +627,8 @@ describe('App', () => {
     expect(follows(face, info)).toBe(true)
 
     // The accent is local to the card face, not the whole screen.
-    expect(face.style.getPropertyValue('--card-accent')).toBe('#2e7d32')
-    expect(face.style.getPropertyValue('--card-on-accent')).toBe('#ffffff')
+    expect(face.style.getPropertyValue('--card-accent')).toBe('#235C52')
+    expect(face.style.getPropertyValue('--card-on-accent')).toBe('#E8ECEB')
     expect(checkout.style.getPropertyValue('--card-accent')).toBe('')
   })
 
@@ -654,8 +654,8 @@ describe('App', () => {
 
   it('keeps the active card accent on the card face across swipes and never writes accent colours to <html>', async () => {
     const { user } = renderApp()
-    await addManualCard(user, 'Slate Shop', '1', 'Code 128', 'Slate')
-    await addManualCard(user, 'Red Shop', '2', 'Code 128', 'Red')
+    await addManualCard(user, 'Slate Shop', '1', 'Code 128', 'Graphite')
+    await addManualCard(user, 'Red Shop', '2', 'Code 128', 'Oxblood Red')
     const root = document.documentElement
     const swipe = (id: number, dx: number) => {
       const stage = screen.getByTestId('checkout-stage')
@@ -672,18 +672,18 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: 'Slate Shop' }))
     expect(root).toHaveClass('checkout-open')
-    expectActive('Slate Shop', '#455a64')
+    expectActive('Slate Shop', '#34383D')
     const close = screen.getByRole('button', { name: 'Close card' })
     expect(close).toHaveFocus()
 
     for (let round = 0; round < 3; round++) {
       swipe(round * 2 + 1, -150)
-      expectActive('Red Shop', '#c62828')
+      expectActive('Red Shop', '#892F32')
       swipe(round * 2 + 2, 150)
-      expectActive('Slate Shop', '#455a64')
+      expectActive('Slate Shop', '#34383D')
     }
     await user.keyboard('{ArrowRight}')
-    expectActive('Red Shop', '#c62828')
+    expectActive('Red Shop', '#892F32')
     // Switching cards does not steal focus back to the × (it stays where it was).
     expect(close).toHaveFocus()
 
@@ -988,7 +988,7 @@ describe('App', () => {
 
   it('renames and recolors a card from the keyboard-accessible options button', async () => {
     const { user } = renderApp()
-    await addManualCard(user, 'Shop', '1', 'Code 128', 'Red')
+    await addManualCard(user, 'Shop', '1', 'Code 128', 'Oxblood Red')
 
     await user.click(screen.getByRole('button', { name: 'Options for Shop' }))
     await user.click(screen.getByRole('button', { name: 'Rename' }))
@@ -1003,9 +1003,9 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Change color' }))
     expect(screen.getByRole('heading', { name: 'Change color' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Tile color' })).toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: 'Purple' }))
+    await user.click(screen.getByRole('radio', { name: 'Deep Violet' }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Better Shop' }).closest('li')).toHaveStyle({ background: '#7b1fa2' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Better Shop' }).closest('li')).toHaveStyle({ background: '#51436C' }))
     expect(screen.getByText('Color changed.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Options for Better Shop' })).toHaveFocus()
 
@@ -1639,7 +1639,7 @@ describe('UI polish and category icons (v0.6.0)', () => {
 
   it('changes and removes an existing card’s icon from the options menu', async () => {
     const repository = makeRepository()
-    await repository.create({ storeName: 'Gas & Go', color: 'yellow', barcode: { kind: 'generated', format: 'code128', value: 'G1' } })
+    await repository.create({ storeName: 'Gas & Go', color: 'white', barcode: { kind: 'generated', format: 'code128', value: 'G1' } })
     const { user, unmount } = renderApp(repository)
     const tile = await screen.findByRole('button', { name: 'Gas & Go' })
     expect(within(tile).getByTestId('tile-icon-slot')).toBeEmptyDOMElement()
@@ -1658,13 +1658,13 @@ describe('UI polish and category icons (v0.6.0)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     const fuel = screen.getByRole('button', { name: 'Gas & Go' }).querySelector('svg[data-icon="fuel"]')
     expect(fuel).toBeInTheDocument()
-    // Yellow is a light tile: the icon is drawn in the tile's charcoal text
-    // color (currentColor), with no outline layer.
+    // Ivory is the one light tile: the icon is drawn in the tile's Charcoal
+    // text color (currentColor), with no outline layer.
     expect(fuel!.querySelector('[data-part="halo"]')).not.toBeInTheDocument()
     expect(fuel!.querySelector('g')).toHaveAttribute('stroke', 'currentColor')
-    expect(screen.getByRole('button', { name: 'Gas & Go' }).closest('li')).toHaveStyle({ color: '#1a1a1a' })
+    expect(screen.getByRole('button', { name: 'Gas & Go' }).closest('li')).toHaveStyle({ color: '#1A1A1A' })
     expect(screen.getByRole('button', { name: 'Options for Gas & Go' })).toHaveFocus()
-    expect((await makeRepository().list())[0]).toMatchObject({ icon: 'fuel', color: 'yellow', storeName: 'Gas & Go' })
+    expect((await makeRepository().list())[0]).toMatchObject({ icon: 'fuel', color: 'white', storeName: 'Gas & Go' })
 
     // Back to None; the menu shows the current choice.
     await user.click(screen.getByRole('button', { name: 'Options for Gas & Go' }))
@@ -1694,8 +1694,8 @@ describe('UI polish and category icons (v0.6.0)', () => {
       expect(Array.from(button.children, (child) => child.className)).toEqual(['tile__icon', 'tile__name'])
     }
 
-    // Green is a dark tile: name and icon are both white (currentColor).
-    expect(tile.closest('li')).toHaveStyle({ background: '#2e7d32', color: '#ffffff' })
+    // Deep Emerald is a dark tile: name and icon are both Soft Silver (currentColor).
+    expect(tile.closest('li')).toHaveStyle({ background: '#235C52', color: '#E8ECEB' })
     expect(tile.querySelector('svg[data-icon="hardware"] g')).toHaveAttribute('stroke', 'currentColor')
 
     await user.click(tile)

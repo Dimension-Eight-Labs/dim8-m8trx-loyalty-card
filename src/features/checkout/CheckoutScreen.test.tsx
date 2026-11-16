@@ -122,9 +122,11 @@ describe('CheckoutScreen layout', () => {
   })
 
   it.each([
-    ['a light color (White): charcoal', 'white', '#eceff1', '#1a1a1a'],
-    ['a light color (Orange): charcoal', 'orange', '#f57c00', '#1a1a1a'],
-    ['a dark color (Indigo): white', 'indigo', '#3949ab', '#ffffff'],
+    ['Ivory: Charcoal', 'white', '#E5E0D1', '#1A1A1A'],
+    ['Copper: Soft Silver', 'orange', '#A26443', '#E8ECEB'],
+    ['Brushed Steel: Soft Silver', 'teal', '#727F89', '#E8ECEB'],
+    ['Antique Gold: Soft Silver', 'yellow', '#9B7B20', '#E8ECEB'],
+    ['Midnight Blue: Soft Silver', 'indigo', '#244669', '#E8ECEB'],
   ])('uses the tile’s title/icon color on %s', (_name, color, background, text) => {
     renderCheckout([makeCard('a', 'Shop', { kind: 'generated', format: 'code128', value: '1' }, { color, icon: 'events' })])
     const face = screen.getByTestId('checkout-card')
